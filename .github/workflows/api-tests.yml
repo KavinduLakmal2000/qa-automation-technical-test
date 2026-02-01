@@ -96,6 +96,7 @@ jobs:
         run: |
           newman run "postman/E2E Shift Management.postman_collection.json" \
             -e "postman/QA Environment.postman_environment.json" \
+            --env-var "baseUrl=http://localhost:8000" \
             -r cli,json,htmlextra \
             --reporter-json-export newman-report.json \
             --reporter-htmlextra-export newman-report.html
