@@ -1,5 +1,5 @@
-// playwright.config.js
-const { defineConfig, devices } = require('@playwright/test');
+// Frontend/playwright.config.js
+const { defineConfig } = require('@playwright/test');
 
 module.exports = defineConfig({
   testDir: './tests',
@@ -9,13 +9,10 @@ module.exports = defineConfig({
   workers: process.env.CI ? 1 : undefined,
   reporter: 'html',
   use: {
-    headless: true,
-    viewport: { width: 1280, height: 720 },
+    baseURL: process.env.BASE_URL || 'http://localhost:5173',
+    trace: 'on-first-retry',
     screenshot: 'only-on-failure',
     video: 'retain-on-failure',
-    trace: 'on-first-retry',
   },
-  projects: [
-    { name: 'chromium', use: { ...devices['Desktop Chrome'] } }
-  ],
+  timeout: 30000,
 });

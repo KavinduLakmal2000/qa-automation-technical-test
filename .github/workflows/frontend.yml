@@ -18,7 +18,6 @@ jobs:
         run: |
           git clone https://github.com/Wahhab1801/automation-engineer-test-fe.git frontend-app
 
-      # Use Node 20 for everything
       - name: Setup Node.js 20
         uses: actions/setup-node@v4
         with:
@@ -40,17 +39,30 @@ jobs:
         working-directory: Frontend
         run: npx playwright install --with-deps
 
+      - name: Ensure playwright.config.js exists
+        working-directory: Frontend
+        run: |
+          if [ ! -f playwright.config.js ]; then
+            echo "Creating playwright.config.js..."
+            cat > playwright.config.js << 'EOF'
+            const { defineConfig } = require('@playwright/test');
+
+            module.exports = defineConfig({
+              testDir: './tests',
+              use: {
+                baseURL: process.env.BASE_URL || 'http://localhost:5173',
+              },
+            });
+            EOF
+          fi
+
       - name: Start frontend server
         working-directory: frontend-app
         run: |
-          # Set environment
           echo "VITE_API_BASE_URL=http://localhost:8000/api" > .env
-          
-          # Start server
           npm run dev &
           echo $! > server.pid
           
-          # Wait for server
           for i in {1..15}; do
             curl -s http://localhost:5173 && echo "✅ Server ready" && break
             sleep 2
@@ -58,8 +70,11 @@ jobs:
 
       - name: Run tests
         working-directory: Frontend
+        env:
+          BASE_URL: "http://localhost:5173"
         run: |
-          npx playwright test --base-url=http://localhost:5173
+          echo "Running Playwright tests against: $BASE_URL"
+          npx playwright test
 
       - name: Cleanup
         if: always()
