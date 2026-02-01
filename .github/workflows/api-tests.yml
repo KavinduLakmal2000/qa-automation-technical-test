@@ -86,16 +86,16 @@ jobs:
       - name: Debug QA Environment
         run: |
           echo "Listing Postman folder contents:"
-          ls -la Backend-repo/postman/
+          ls -la postman/
           
           echo "Displaying QA Environment file contents:"
-          cat "Backend-repo/postman/QA Environment.postman_environment.json"
+          cat "postman/QA Environment.postman_environment.json"
 
       # 1️⃣1️⃣ Run Postman collection
       - name: Run Postman collection
         run: |
           newman run "postman/E2E Shift Management.postman_collection.json" \
-            -e "Backend-repo/postman/QA Environment.postman_environment.json" \
+            -e "postman/QA Environment.postman_environment.json" \
             -r cli,json,htmlextra \
             --reporter-json-export newman-report.json \
             --reporter-htmlextra-export newman-report.html
