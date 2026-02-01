@@ -42,7 +42,7 @@ jobs:
           echo $! > server.pid
           
           sleep 10
-          curl -s http://localhost:5173 && echo "✅ Frontend server is ready"
+          curl -s http://localhost:5173 && echo "Frontend server is ready"
 
       - name: Verify backend API
         run: |

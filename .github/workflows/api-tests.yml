@@ -297,9 +297,9 @@ jobs:
               echo "Failed Tests: $FAILED_TESTS"
               
               if [ "$FAILED_REQUESTS" != "0" ] || [ "$FAILED_TESTS" != "0" ]; then
-                echo "⚠️ Some tests failed"
+                echo "Some tests failed"
               else
-                echo "✅ All tests passed!"
+                echo "All tests passed!"
               fi
             else
               echo "jq not available for parsing report"
