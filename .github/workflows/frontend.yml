@@ -10,13 +10,6 @@ jobs:
   frontend-tests:
     runs-on: ubuntu-latest
     
-    # Add MongoDB service
-    services:
-      mongodb:
-        image: mongo:6
-        ports:
-          - 27017:27017
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -25,74 +18,12 @@ jobs:
         run: |
           git clone https://github.com/Wahhab1801/automation-engineer-test-fe.git frontend-app
 
-      - name: Clone backend app
-        run: |
-          git clone https://github.com/Wahhab1801/automation-engineer-test-be.git backend-app
-
       - name: Setup Node.js 20
         uses: actions/setup-node@v4
         with:
           node-version: 20
 
-      # Install and start backend
-      - name: Setup backend
-        working-directory: backend-app
-        run: |
-          npm ci
-          
-          # Create .env file
-          cat > .env << 'EOF'
-          MONGO_URI=mongodb://localhost:27017/orta_test
-          PORT=8000
-          NODE_ENV=test
-          JWT_SECRET=test-jwt-secret-for-ci-12345-67890
-          SUPPORT_EMAIL=test@example.com
-          GMAIL_USERNAME=test@example.com
-          GMAIL_PASSWORD=testpassword
-          FRONTEND_URL=http://localhost:5173
-          EOF
-
-      - name: Start backend server
-        working-directory: backend-app
-        run: |
-          echo "Starting backend server..."
-          npm start &
-          echo $! > server.pid
-          
-          # Wait for backend
-          for i in {1..30}; do
-            if curl -s http://localhost:8000 > /dev/null 2>&1; then
-              echo "✅ Backend server is ready"
-              break
-            fi
-            echo "Waiting for backend... ($i/30)"
-            sleep 2
-          done
-
-      # Create test users BEFORE starting frontend
-      - name: Create test users via API
-        run: |
-          echo "Creating test users..."
-          sleep 3  # Give backend more time
-          
-          # Create the users from your data.js file
-          curl -X POST http://localhost:8000/api/user/register \
-            -H "Content-Type: application/json" \
-            -d '{"name":"John Doe","email":"john@example.com","password":"StrongPass123!"}' \
-            -w "\nStatus: %{http_code}\n" || echo "Registration attempt 1"
-          
-          curl -X POST http://localhost:8000/api/user/register \
-            -H "Content-Type: application/json" \
-            -d '{"name":"Test User","email":"newuser@example.com","password":"StrongPass123!"}' \
-            -w "\nStatus: %{http_code}\n" || echo "Registration attempt 2"
-          
-          # Test login to verify
-          curl -X POST http://localhost:8000/api/user/login \
-            -H "Content-Type: application/json" \
-            -d '{"email":"john@example.com","password":"StrongPass123!"}' \
-            -w "\nStatus: %{http_code}\n" || echo "Login test"
-
-      # Setup and start frontend
+      # Install dependencies
       - name: Install frontend deps
         working-directory: frontend-app
         run: npm ci
@@ -103,54 +34,60 @@ jobs:
           npm ci
           npx playwright install --with-deps
 
+      # Start frontend with LIVE backend URL
       - name: Start frontend server
         working-directory: frontend-app
         run: |
-          echo "VITE_API_BASE_URL=http://localhost:8000/api" > .env
-          echo "Frontend connecting to: http://localhost:8000/api"
+          # Use the LIVE backend URL from the PDF
+          echo "VITE_API_BASE_URL=https://automation-engineer-test-be.onrender.com/api" > .env
+          echo "Frontend connecting to: https://automation-engineer-test-be.onrender.com/api"
           npm run dev &
           echo $! > server.pid
           
-          for i in {1..15}; do
-            if curl -s http://localhost:5173 > /dev/null 2>&1; then
-              echo "✅ Frontend server is ready"
-              break
-            fi
-            sleep 2
-          done
+          # Wait longer for server
+          sleep 10
+          curl -s http://localhost:5173 && echo "✅ Frontend server is ready"
 
-      - name: Verify services are working
+      # Verify the LIVE backend is accessible
+      - name: Verify backend API
         run: |
-          echo "=== Service Status ==="
-          echo "Backend API:"
-          curl -s http://localhost:8000/api/user/test || curl -s http://localhost:8000 || echo "Backend check failed"
+          echo "Testing backend API connection..."
+          curl -s https://automation-engineer-test-be.onrender.com/api/docs || curl -s https://automation-engineer-test-be.onrender.com || echo "Backend check"
           
-          echo "Frontend:"
-          curl -s -o /dev/null -w "Status: %{http_code}\n" http://localhost:5173 || echo "Frontend check failed"
-          
-          echo "Testing API endpoint..."
-          curl -X POST http://localhost:8000/api/user/login \
+          # Try to register a user to verify API works
+          echo "Testing registration API..."
+          curl -X POST https://automation-engineer-test-be.onrender.com/api/user/register \
             -H "Content-Type: application/json" \
-            -d '{"email":"john@example.com","password":"StrongPass123!"}' \
-            -s -w "Login API: %{http_code}\n" | head -c 100
+            -d '{"name":"Test User","email":"test'$(date +%s)'@example.com","password":"TestPass123!"}' \
+            -w "\nStatus: %{http_code}\n" -s || echo "API test"
+
+      # Update your test data to use REAL test users
+      - name: Update test data to match backend
+        working-directory: Frontend
+        run: |
+          echo "Checking test data..."
+          if [ -f data.js ]; then
+            echo "Updating test data to use email that might exist..."
+            # Create a unique email for testing
+            UNIQUE_EMAIL="test_$(date +%s)@example.com"
+            sed -i "s|'john@example.com'|'$UNIQUE_EMAIL'|g" data.js
+            sed -i "s|'newuser@example.com'|'$UNIQUE_EMAIL'|g" data.js
+            echo "Test email updated to: $UNIQUE_EMAIL"
+          fi
 
       - name: Run tests
         working-directory: Frontend
         env:
           BASE_URL: "http://localhost:5173"
         run: |
-          echo "Running Playwright tests..."
+          echo "Running Playwright tests against local frontend with LIVE backend..."
           npx playwright test
 
       - name: Cleanup
         if: always()
         run: |
-          echo "Cleaning up..."
           if [ -f frontend-app/server.pid ]; then
             kill $(cat frontend-app/server.pid) 2>/dev/null || true
-          fi
-          if [ -f backend-app/server.pid ]; then
-            kill $(cat backend-app/server.pid) 2>/dev/null || true
           fi
 
       - name: Upload report
