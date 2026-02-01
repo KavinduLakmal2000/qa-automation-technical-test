@@ -2,115 +2,104 @@ name: Frontend Playwright Tests
 
 on:
   push:
-    branches:
-      - main
-      - develop
+    branches: [main, develop]
   pull_request:
-    branches:
-      - main
+    branches: [main]
 
 jobs:
   frontend-tests:
     runs-on: ubuntu-latest
-
+    
     steps:
+      # Step 1: Checkout YOUR repository (with the tests)
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      # Step 2: Clone the FRONTEND application
+      - name: Clone frontend app
+        run: |
+          echo "📦 Cloning frontend application..."
+          git clone https://github.com/Wahhab1801/automation-engineer-test-fe.git frontend-app
+          cd frontend-app
+          echo "✅ Frontend app cloned"
+
+      # Step 3: Setup Node.js
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 18
-          cache: npm
-          cache-dependency-path: Frontend/package-lock.json
+          cache: 'npm'
+          cache-dependency-path: frontend-app/package-lock.json
 
-      - name: Install dependencies
-        working-directory: Frontend
+      # Step 4: Install frontend dependencies
+      - name: Install frontend deps
+        working-directory: frontend-app
         run: npm ci
 
-      - name: Install Playwright browsers
-        working-directory: Frontend
-        run: npx playwright install --with-deps
-
-      - name: Setup environment variables
-        working-directory: Frontend
+      # Step 5: Setup environment for frontend
+      - name: Setup environment
+        working-directory: frontend-app
         run: |
-          echo "Creating .env file for CI..."
+          echo "🔧 Setting up environment..."
+          # The frontend needs to know where the backend API is
+          # Since we're only testing frontend, use a dummy URL or actual backend
           echo "VITE_API_URL=http://localhost:8000/api" > .env
-          echo "VITE_APP_ENV=test" >> .env
-          cat .env
+          echo "✅ Environment file created"
 
-      - name: Start frontend development server
-        working-directory: Frontend
+      # Step 6: Start the frontend server IN THE GITHUB VM
+      - name: Start frontend server
+        working-directory: frontend-app
         run: |
-          echo "Starting frontend server in background..."
-          # Start the dev server in background
+          echo "🚀 Starting frontend server..."
+          # This starts the server IN THE BACKGROUND in the GitHub VM
           npm run dev &
-          SERVER_PID=$!
-          echo $SERVER_PID > server.pid
+          # Save the process ID so we can kill it later
+          echo $! > server.pid
           
-          echo "Waiting for server to start..."
-          # Wait for server to be ready
+          echo "⏳ Waiting for server to start..."
+          # Wait for the server to be ready
           for i in {1..30}; do
-            if curl -s -f http://localhost:5173 > /dev/null 2>&1; then
-              echo "✅ Frontend server is responding"
+            if curl -s http://localhost:5173 > /dev/null 2>&1; then
+              echo "✅ Frontend server is running at http://localhost:5173"
               break
             fi
-            echo "Waiting for server... ($i/30)"
+            echo "Waiting... attempt $i/30"
             sleep 2
           done
           
-          # Check if server started
-          if ! ps -p $SERVER_PID > /dev/null 2>&1; then
-            echo "❌ Server process died"
-            if [ -f npm-debug.log ]; then
-              echo "Server logs:"
-              tail -50 npm-debug.log
-            fi
-            exit 1
-          fi
+          # Verify server is running
+          curl -s -o /dev/null -w "HTTP Status: %{http_code}\n" http://localhost:5173
 
-      - name: Verify frontend is accessible
-        run: |
-          echo "Testing frontend access..."
-          curl -s -o /dev/null -w "HTTP Status: %{http_code}\n" -m 10 http://localhost:5173 || echo "Failed to connect"
-
+      # Step 7: Now run your Playwright tests
       - name: Run Playwright tests
-        working-directory: Frontend
+        working-directory: Frontend  # Your test directory
         run: |
-          echo "Running Playwright tests..."
-          # Set timeout and retries
-          npx playwright test \
-            --timeout=30000 \
-            --retries=2 \
-            --reporter=html,line
+          echo "🧪 Running Playwright tests..."
+          # First, install test dependencies
+          npm ci
+          
+          # Install Playwright browsers
+          npx playwright install --with-deps
+          
+          # Run tests against the local server
+          npx playwright test --base-url=http://localhost:5173
 
+      # Step 8: Cleanup - stop the server
       - name: Stop frontend server
         if: always()
-        working-directory: Frontend
+        working-directory: frontend-app
         run: |
-          echo "Stopping frontend server..."
+          echo "🧹 Cleaning up..."
           if [ -f server.pid ]; then
-            PID=$(cat server.pid)
-            echo "Stopping server with PID: $PID"
-            kill $PID 2>/dev/null || true
-            sleep 1
-            kill -9 $PID 2>/dev/null || true
-            rm -f server.pid
+            echo "Stopping server with PID: $(cat server.pid)"
+            kill $(cat server.pid) 2>/dev/null || true
+            rm server.pid
           fi
-          # Clean up any remaining processes
-          pkill -f "vite" 2>/dev/null || true
 
-      - name: Upload Playwright report
+      # Step 9: Upload test results
+      - name: Upload test report
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: playwright-report
           path: Frontend/playwright-report/
-
-      - name: Upload test results
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: test-results
-          path: Frontend/test-results/
