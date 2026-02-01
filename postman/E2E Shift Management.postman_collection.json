@@ -105,6 +105,7 @@
 										"{{baseUrl}}"
 									],
 									"path": [
+                    "api",
 										"user",
 										"register"
 									]
@@ -164,11 +165,12 @@
 									"raw": "{\r\n  \"email\": \"{{userEmail}}\",\r\n  \"password\": \"StrongPass123!\"\r\n}\r\n"
 								},
 								"url": {
-									"raw": "{{baseUrl}}/user/login",
+									"raw": "{{baseUrl}}/api/user/login",
 									"host": [
 										"{{baseUrl}}"
 									],
 									"path": [
+                    "api",
 										"user",
 										"login"
 									]
@@ -223,11 +225,12 @@
 									"raw": "{\r\n  \"email\": \"{{adminEmail}}\",\r\n  \"password\": \"{{adminPassword}}\"\r\n}\r\n"
 								},
 								"url": {
-									"raw": "{{baseUrl}}/user/login",
+									"raw": "{{baseUrl}}/api/user/login",
 									"host": [
 										"{{baseUrl}}"
 									],
 									"path": [
+										"api",
 										"user",
 										"login"
 									]
@@ -277,11 +280,12 @@
 									}
 								},
 								"url": {
-									"raw": "{{baseUrl}}/user/login",
+									"raw": "{{baseUrl}}/api/user/login",
 									"host": [
 										"{{baseUrl}}"
 									],
 									"path": [
+										"api",
 										"user",
 										"login"
 									]
@@ -326,11 +330,12 @@
 									}
 								},
 								"url": {
-									"raw": "{{baseUrl}}/user/login",
+									"raw": "{{baseUrl}}/api/user/login",
 									"host": [
 										"{{baseUrl}}"
 									],
 									"path": [
+										"api",
 										"user",
 										"login"
 									]
@@ -375,11 +380,12 @@
 									}
 								},
 								"url": {
-									"raw": "{{baseUrl}}/user/login",
+									"raw": "{{baseUrl}}/api/user/login",
 									"host": [
 										"{{baseUrl}}"
 									],
 									"path": [
+										"api",
 										"user",
 										"login"
 									]
@@ -481,11 +487,12 @@
 							"raw": "{\r\n  \"userId\": \"{{newUserId}}\"\r\n}"
 						},
 						"url": {
-							"raw": "{{baseUrl}}/user/promote-to-admin",
+							"raw": "{{baseUrl}}/api/user/promote-to-admin",
 							"host": [
 								"{{baseUrl}}"
 							],
 							"path": [
+								"api",
 								"user",
 								"promote-to-admin"
 							]
@@ -595,11 +602,12 @@
 							"raw": "{\r\n  \"userId\": \"{{newUserId}}\"\r\n}"
 						},
 						"url": {
-							"raw": "{{baseUrl}}/user/promote-to-admin",
+							"raw": "{{baseUrl}}/api/user/promote-to-admin",
 							"host": [
 								"{{baseUrl}}"
 							],
 							"path": [
+								"api",
 								"user",
 								"promote-to-admin"
 							]
@@ -704,11 +712,12 @@
 							"raw": "{\r\n  \"userId\": \"{{newUserId}}\"\r\n}"
 						},
 						"url": {
-							"raw": "{{baseUrl}}/user/promote-to-admin",
+							"raw": "{{baseUrl}}/api/user/promote-to-admin",
 							"host": [
 								"{{baseUrl}}"
 							],
 							"path": [
+                "api",
 								"user",
 								"promote-to-admin"
 							]
@@ -840,6 +849,7 @@
 								"{{baseUrl}}"
 							],
 							"path": [
+                "api",
 								"shifts"
 							]
 						}
@@ -926,6 +936,7 @@
 								"{{baseUrl}}"
 							],
 							"path": [
+                "api",
 								"shifts",
 								"{{shiftId}}"
 							]
@@ -1053,6 +1064,7 @@
 								"{{baseUrl}}"
 							],
 							"path": [
+                "api",
 								"shifts"
 							]
 						}
@@ -1179,6 +1191,7 @@
 								"{{baseUrl}}"
 							],
 							"path": [
+                "api",
 								"shifts"
 							]
 						}
@@ -1301,6 +1314,7 @@
 								"{{baseUrl}}"
 							],
 							"path": [
+                "api",
 								"shifts"
 							]
 						}
@@ -1355,6 +1369,7 @@
 								"{{baseUrl}}"
 							],
 							"path": [
+                "api",
 								"shifts"
 							],
 							"query": [
@@ -1424,6 +1439,7 @@
 								"{{baseUrl}}"
 							],
 							"path": [
+                "api",
 								"shifts",
 								"{{shiftId}}",
 								"clock-in"
@@ -1488,6 +1504,7 @@
 								"{{baseUrl}}"
 							],
 							"path": [
+                "api",
 								"shifts",
 								"{{shiftId}}",
 								"clock-out"
@@ -1555,6 +1572,7 @@
 								"{{baseUrl}}"
 							],
 							"path": [
+                "api",
 								"shifts",
 								"{{shiftIdCancel}}",
 								"cancel"
@@ -1624,6 +1642,7 @@
 								"{{baseUrl}}"
 							],
 							"path": [
+                "api",
 								"shifts",
 								"{{adminShiftId}}",
 								"clock-in"
@@ -1693,6 +1712,7 @@
 								"{{baseUrl}}"
 							],
 							"path": [
+                "api",
 								"shifts",
 								"{{adminShiftId}}",
 								"clock-out"
@@ -1746,6 +1766,7 @@
 								"{{baseUrl}}"
 							],
 							"path": [
+                "api",
 								"shifts",
 								"{{adminShiftId}}"
 							]
@@ -1798,6 +1819,7 @@
 								"{{baseUrl}}"
 							],
 							"path": [
+                "api",
 								"shifts",
 								"{{shiftIdCancel}}"
 							]
@@ -1850,6 +1872,7 @@
 								"{{baseUrl}}"
 							],
 							"path": [
+                "api",
 								"shifts",
 								"{{shiftId}}"
 							]
