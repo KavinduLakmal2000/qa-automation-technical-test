@@ -1,1 +1,110 @@
 
+name: API Tests (Postman + Newman)
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  api-tests:
+    runs-on: ubuntu-latest
+
+    services:
+      mongodb:
+        image: mongo:6
+        ports:
+          - 27017:27017
+
+    steps:
+      # 1️⃣ Checkout test repo (current repo)
+      - name: Checkout tests repo
+        uses: actions/checkout@v4
+
+      # 2️⃣ Checkout backend repo
+      - name: Checkout backend repo
+        uses: actions/checkout@v4
+        with:
+          repository: silumi95/automation-engineer-test-be
+          path: backend
+
+      # 3️⃣ Setup Node.js
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+
+      # 4️⃣ Install backend dependencies
+      - name: Install backend dependencies
+        working-directory: backend
+        run: npm install
+
+      # 5️⃣ Install netcat (for port check)
+      - name: Install netcat
+        run: sudo apt-get update && sudo apt-get install -y netcat-openbsd
+
+      # 6️⃣ Wait for MongoDB
+      - name: Wait for MongoDB
+        run: |
+          echo "Waiting for MongoDB..."
+          for i in {1..30}; do
+            nc -z localhost 27017 && echo "MongoDB ready" && break
+            sleep 2
+          done
+
+      # 7️⃣ Start backend server
+      - name: Start backend server
+        working-directory: backend
+        env:
+          PORT: 8000
+          MONGO_URI: mongodb://127.0.0.1:27017/qa_test_db
+        run: |
+          npm run dev &
+          echo "Waiting for backend on port 8000..."
+          for i in {1..30}; do
+            nc -z localhost 8000 && echo "Backend ready" && break
+            sleep 2
+          done
+
+      # 8️⃣ Health check for backend
+      - name: Wait for backend health
+        run: |
+          echo "Checking backend health..."
+          for i in {1..30}; do
+            status=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8000/health || true)
+            if [ "$status" = "200" ]; then
+              echo "Backend healthy"
+              break
+            fi
+            sleep 2
+          done
+
+      # 9️⃣ Install Newman
+      - name: Install Newman
+        run: npm install -g newman newman-reporter-htmlextra
+
+      # 🔟 Debug QA Environment
+      - name: Debug QA Environment
+        run: |
+          echo "Listing Postman folder contents:"
+          ls -la Backend-repo/postman/
+          
+          echo "Displaying QA Environment file contents:"
+          cat "Backend-repo/postman/QA Environment.postman_environment.json"
+
+      # 1️⃣1️⃣ Run Postman collection
+      - name: Run Postman collection
+        run: |
+          newman run "Backend-repo/postman/E2E Shift Management.postman_collection.json" \
+            -e "Backend-repo/postman/QA Environment.postman_environment.json" \
+            -r cli,json,htmlextra \
+            --reporter-json-export newman-report.json \
+            --reporter-htmlextra-export newman-report.html
+
+      # 1️⃣2️⃣ Upload Newman report
+      - name: Upload Newman report
+        uses: actions/upload-artifact@v4
+        with:
+          name: newman-report
+          path: |
+            newman-report.json
+            newman-report.html
