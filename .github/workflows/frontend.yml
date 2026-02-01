@@ -23,7 +23,6 @@ jobs:
         with:
           node-version: 20
 
-      # Install dependencies
       - name: Install frontend deps
         working-directory: frontend-app
         run: npm ci
@@ -34,41 +33,34 @@ jobs:
           npm ci
           npx playwright install --with-deps
 
-      # Start frontend with LIVE backend URL
       - name: Start frontend server
         working-directory: frontend-app
         run: |
-          # Use the LIVE backend URL from the PDF
           echo "VITE_API_BASE_URL=https://automation-engineer-test-be.onrender.com/api" > .env
           echo "Frontend connecting to: https://automation-engineer-test-be.onrender.com/api"
           npm run dev &
           echo $! > server.pid
           
-          # Wait longer for server
           sleep 10
           curl -s http://localhost:5173 && echo "✅ Frontend server is ready"
 
-      # Verify the LIVE backend is accessible
       - name: Verify backend API
         run: |
           echo "Testing backend API connection..."
           curl -s https://automation-engineer-test-be.onrender.com/api/docs || curl -s https://automation-engineer-test-be.onrender.com || echo "Backend check"
           
-          # Try to register a user to verify API works
           echo "Testing registration API..."
           curl -X POST https://automation-engineer-test-be.onrender.com/api/user/register \
             -H "Content-Type: application/json" \
             -d '{"name":"Test User","email":"test'$(date +%s)'@example.com","password":"TestPass123!"}' \
             -w "\nStatus: %{http_code}\n" -s || echo "API test"
 
-      # Update your test data to use REAL test users
       - name: Update test data to match backend
         working-directory: Frontend
         run: |
           echo "Checking test data..."
           if [ -f data.js ]; then
             echo "Updating test data to use email that might exist..."
-            # Create a unique email for testing
             UNIQUE_EMAIL="test_$(date +%s)@example.com"
             sed -i "s|'john@example.com'|'$UNIQUE_EMAIL'|g" data.js
             sed -i "s|'newuser@example.com'|'$UNIQUE_EMAIL'|g" data.js
