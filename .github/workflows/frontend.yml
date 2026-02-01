@@ -10,11 +10,17 @@ jobs:
   frontend-tests:
     runs-on: ubuntu-latest
     
+    # Add MongoDB service
+    services:
+      mongodb:
+        image: mongo:6
+        ports:
+          - 27017:27017
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # Clone both frontend AND backend
       - name: Clone frontend app
         run: |
           git clone https://github.com/Wahhab1801/automation-engineer-test-fe.git frontend-app
@@ -28,23 +34,13 @@ jobs:
         with:
           node-version: 20
 
-      # Start MongoDB for backend
-      - name: Start MongoDB
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y mongodb
-          sudo systemctl start mongodb
-          sudo systemctl status mongodb
-          mongod --version
-
-      # Setup and start backend first
-      - name: Setup and start backend
+      # Install and start backend
+      - name: Setup backend
         working-directory: backend-app
         run: |
-          echo "Setting up backend..."
           npm ci
           
-          # Create .env file for backend
+          # Create .env file
           cat > .env << 'EOF'
           MONGO_URI=mongodb://localhost:27017/orta_test
           PORT=8000
@@ -55,21 +51,46 @@ jobs:
           GMAIL_PASSWORD=testpassword
           FRONTEND_URL=http://localhost:5173
           EOF
-          
+
+      - name: Start backend server
+        working-directory: backend-app
+        run: |
           echo "Starting backend server..."
           npm start &
           echo $! > server.pid
           
           # Wait for backend
-          echo "Waiting for backend server..."
           for i in {1..30}; do
-            if curl -s http://localhost:8000/health > /dev/null 2>&1 || curl -s http://localhost:8000 > /dev/null 2>&1; then
+            if curl -s http://localhost:8000 > /dev/null 2>&1; then
               echo "✅ Backend server is ready"
               break
             fi
             echo "Waiting for backend... ($i/30)"
             sleep 2
           done
+
+      # Create test users BEFORE starting frontend
+      - name: Create test users via API
+        run: |
+          echo "Creating test users..."
+          sleep 3  # Give backend more time
+          
+          # Create the users from your data.js file
+          curl -X POST http://localhost:8000/api/user/register \
+            -H "Content-Type: application/json" \
+            -d '{"name":"John Doe","email":"john@example.com","password":"StrongPass123!"}' \
+            -w "\nStatus: %{http_code}\n" || echo "Registration attempt 1"
+          
+          curl -X POST http://localhost:8000/api/user/register \
+            -H "Content-Type: application/json" \
+            -d '{"name":"Test User","email":"newuser@example.com","password":"StrongPass123!"}' \
+            -w "\nStatus: %{http_code}\n" || echo "Registration attempt 2"
+          
+          # Test login to verify
+          curl -X POST http://localhost:8000/api/user/login \
+            -H "Content-Type: application/json" \
+            -d '{"email":"john@example.com","password":"StrongPass123!"}' \
+            -w "\nStatus: %{http_code}\n" || echo "Login test"
 
       # Setup and start frontend
       - name: Install frontend deps
@@ -86,10 +107,10 @@ jobs:
         working-directory: frontend-app
         run: |
           echo "VITE_API_BASE_URL=http://localhost:8000/api" > .env
+          echo "Frontend connecting to: http://localhost:8000/api"
           npm run dev &
           echo $! > server.pid
           
-          echo "Waiting for frontend server..."
           for i in {1..15}; do
             if curl -s http://localhost:5173 > /dev/null 2>&1; then
               echo "✅ Frontend server is ready"
@@ -98,34 +119,20 @@ jobs:
             sleep 2
           done
 
-      - name: Create test users
-        run: |
-          echo "Creating test users via API..."
-          # Register test user
-          curl -X POST http://localhost:8000/api/user/register \
-            -H "Content-Type: application/json" \
-            -d '{"name":"Test User","email":"test@example.com","password":"TestPass123!"}' \
-            -w "\nStatus: %{http_code}\n"
-          
-          # Also create the specific users from the PDF
-          curl -X POST http://localhost:8000/api/user/register \
-            -H "Content-Type: application/json" \
-            -d '{"name":"John Doe","email":"john@example.com","password":"StrongPass123!"}' \
-            -w "\nStatus: %{http_code}\n"
-          
-          curl -X POST http://localhost:8000/api/user/register \
-            -H "Content-Type: application/json" \
-            -d '{"name":"Alice Smith","email":"alice@example.com","password":"StrongPass123!"}' \
-            -w "\nStatus: %{http_code}\n"
-
-      - name: Verify services
+      - name: Verify services are working
         run: |
           echo "=== Service Status ==="
-          echo "Backend (port 8000):"
-          curl -s -o /dev/null -w "HTTP: %{http_code}\n" -m 5 http://localhost:8000 || echo "Failed"
+          echo "Backend API:"
+          curl -s http://localhost:8000/api/user/test || curl -s http://localhost:8000 || echo "Backend check failed"
           
-          echo "Frontend (port 5173):"
-          curl -s -o /dev/null -w "HTTP: %{http_code}\n" -m 5 http://localhost:5173 || echo "Failed"
+          echo "Frontend:"
+          curl -s -o /dev/null -w "Status: %{http_code}\n" http://localhost:5173 || echo "Frontend check failed"
+          
+          echo "Testing API endpoint..."
+          curl -X POST http://localhost:8000/api/user/login \
+            -H "Content-Type: application/json" \
+            -d '{"email":"john@example.com","password":"StrongPass123!"}' \
+            -s -w "Login API: %{http_code}\n" | head -c 100
 
       - name: Run tests
         working-directory: Frontend
@@ -139,16 +146,12 @@ jobs:
         if: always()
         run: |
           echo "Cleaning up..."
-          # Stop frontend
           if [ -f frontend-app/server.pid ]; then
             kill $(cat frontend-app/server.pid) 2>/dev/null || true
           fi
-          # Stop backend
           if [ -f backend-app/server.pid ]; then
             kill $(cat backend-app/server.pid) 2>/dev/null || true
           fi
-          # Stop MongoDB
-          sudo systemctl stop mongodb 2>/dev/null || true
 
       - name: Upload report
         if: always()
