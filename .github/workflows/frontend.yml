@@ -11,93 +11,64 @@ jobs:
     runs-on: ubuntu-latest
     
     steps:
-      # Step 1: Checkout YOUR repository (with the tests)
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # Step 2: Clone the FRONTEND application
       - name: Clone frontend app
         run: |
-          echo "📦 Cloning frontend application..."
           git clone https://github.com/Wahhab1801/automation-engineer-test-fe.git frontend-app
-          cd frontend-app
-          echo "✅ Frontend app cloned"
 
-      # Step 3: Setup Node.js
-      - name: Setup Node.js
+      # Use Node 20 for everything
+      - name: Setup Node.js 20
         uses: actions/setup-node@v4
         with:
-          node-version: 18
+          node-version: 20
           cache: 'npm'
-          cache-dependency-path: frontend-app/package-lock.json
+          cache-dependency-path: |
+            frontend-app/package-lock.json
+            Frontend/package-lock.json
 
-      # Step 4: Install frontend dependencies
       - name: Install frontend deps
         working-directory: frontend-app
         run: npm ci
 
-      # Step 5: Setup environment for frontend
-      - name: Setup environment
-        working-directory: frontend-app
-        run: |
-          echo "🔧 Setting up environment..."
-          # The frontend needs to know where the backend API is
-          # Since we're only testing frontend, use a dummy URL or actual backend
-          echo "VITE_API_URL=http://localhost:8000/api" > .env
-          echo "✅ Environment file created"
+      - name: Install test deps
+        working-directory: Frontend
+        run: npm ci
 
-      # Step 6: Start the frontend server IN THE GITHUB VM
+      - name: Install Playwright
+        working-directory: Frontend
+        run: npx playwright install --with-deps
+
       - name: Start frontend server
         working-directory: frontend-app
         run: |
-          echo "🚀 Starting frontend server..."
-          # This starts the server IN THE BACKGROUND in the GitHub VM
+          # Set environment
+          echo "VITE_API_BASE_URL=http://localhost:8000/api" > .env
+          
+          # Start server
           npm run dev &
-          # Save the process ID so we can kill it later
           echo $! > server.pid
           
-          echo "⏳ Waiting for server to start..."
-          # Wait for the server to be ready
-          for i in {1..30}; do
-            if curl -s http://localhost:5173 > /dev/null 2>&1; then
-              echo "✅ Frontend server is running at http://localhost:5173"
-              break
-            fi
-            echo "Waiting... attempt $i/30"
+          # Wait for server
+          for i in {1..15}; do
+            curl -s http://localhost:5173 && echo "✅ Server ready" && break
             sleep 2
           done
-          
-          # Verify server is running
-          curl -s -o /dev/null -w "HTTP Status: %{http_code}\n" http://localhost:5173
 
-      # Step 7: Now run your Playwright tests
-      - name: Run Playwright tests
-        working-directory: Frontend  # Your test directory
+      - name: Run tests
+        working-directory: Frontend
         run: |
-          echo "🧪 Running Playwright tests..."
-          # First, install test dependencies
-          npm ci
-          
-          # Install Playwright browsers
-          npx playwright install --with-deps
-          
-          # Run tests against the local server
           npx playwright test --base-url=http://localhost:5173
 
-      # Step 8: Cleanup - stop the server
-      - name: Stop frontend server
+      - name: Cleanup
         if: always()
-        working-directory: frontend-app
         run: |
-          echo "🧹 Cleaning up..."
-          if [ -f server.pid ]; then
-            echo "Stopping server with PID: $(cat server.pid)"
-            kill $(cat server.pid) 2>/dev/null || true
-            rm server.pid
+          if [ -f frontend-app/server.pid ]; then
+            kill $(cat frontend-app/server.pid) 2>/dev/null || true
           fi
 
-      # Step 9: Upload test results
-      - name: Upload test report
+      - name: Upload report
         if: always()
         uses: actions/upload-artifact@v4
         with:
