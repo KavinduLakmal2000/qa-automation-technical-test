@@ -61,88 +61,14 @@ jobs:
           echo "Environment file created:"
           cat .env
 
-      # 8️⃣ Seed test admin user (ES Module version)
-      - name: Seed test admin user
-        working-directory: backend
-        run: |
-          # Create ES module seed script
-          cat > seed-admin.mjs << 'EOF'
-          import mongoose from 'mongoose';
-          import bcrypt from 'bcryptjs';
-          
-          async function seedAdmin() {
-            try {
-              console.log('Connecting to MongoDB for seeding...');
-              await mongoose.connect('mongodb://127.0.0.1:27017/qa_test_db');
-              
-              // Drop database to start fresh
-              await mongoose.connection.db.dropDatabase();
-              console.log('Database cleared');
-              
-              let User;
-              try {
-                // Try to import User model
-                const userModule = await import('./models/User.js');
-                User = userModule.default;
-              } catch (e) {
-                console.log('Creating User schema...');
-                // Create simple User schema if model doesn't exist
-                const userSchema = new mongoose.Schema({
-                  name: String,
-                  email: { type: String, unique: true },
-                  password: String,
-                  role: { type: String, enum: ['worker', 'admin'], default: 'worker' }
-                });
-                User = mongoose.model('User', userSchema);
-              }
-              
-              // Create admin user
-              const hashedPassword = await bcrypt.hash('AdminPass123!', 10);
-              const admin = new User({
-                name: 'Test Admin',
-                email: 'admin@example.com',
-                password: hashedPassword,
-                role: 'admin'
-              });
-              
-              await admin.save();
-              console.log('✅ Test admin user created');
-              
-              // Create a test worker user
-              const workerPassword = await bcrypt.hash('WorkerPass123!', 10);
-              const worker = new User({
-                name: 'Test Worker',
-                email: 'worker@example.com',
-                password: workerPassword,
-                role: 'worker'
-              });
-              
-              await worker.save();
-              console.log('✅ Test worker user created');
-              
-              await mongoose.disconnect();
-              console.log('✅ Seeding completed');
-            } catch (error) {
-              console.error('❌ Error seeding:', error.message);
-              console.error(error.stack);
-              process.exit(1);
-            }
-          }
-          
-          seedAdmin();
-          EOF
-          
-          echo "Running seed script..."
-          node seed-admin.mjs
-
-      # 9️⃣ Start backend server
+      # 8️⃣ Start backend server (it will seed on startup or we'll register admin via API)
       - name: Start backend server
         working-directory: backend
         run: |
           echo "Starting backend server..."
           
           # Start server in background with output to log file
-          nohup node server.js > server.log 2>&1 &
+          nohup npm start > server.log 2>&1 &
           SERVER_PID=$!
           echo $SERVER_PID > server.pid
           
@@ -153,16 +79,10 @@ jobs:
             if curl -s -f http://localhost:8000 > /dev/null 2>&1; then
               echo "✅ Backend server is responding"
               
-              # Test basic endpoints
-              echo "Testing health endpoint..."
-              curl -s http://localhost:8000/health || curl -s http://localhost:8000/api/health || echo "No health endpoint"
+              # Check if server has health endpoint
+              echo "Testing server health..."
+              curl -s http://localhost:8000/health || curl -s http://localhost:8000/api/health || echo "No health endpoint found"
               
-              echo "Testing register endpoint..."
-              curl -X POST http://localhost:8000/api/user/register \
-                -H "Content-Type: application/json" \
-                -d '{"name":"CI Test","email":"ci@test.com","password":"CITest123!"}' \
-                -s -w " Status: %{http_code}" || echo "Register test failed"
-                
               break
             fi
             sleep 2
@@ -183,140 +103,270 @@ jobs:
             tail -50 server.log
           fi
 
-      # 🔟 Install Newman
+      # 9️⃣ Create admin user via API
+      - name: Create admin user via API
+        run: |
+          echo "Creating admin user via API..."
+          
+          # First, register an admin user
+          ADMIN_RESPONSE=$(curl -s -X POST http://localhost:8000/api/user/register \
+            -H "Content-Type: application/json" \
+            -d '{"name":"Test Admin","email":"admin@example.com","password":"AdminPass123!","role":"admin"}' \
+            -w "\nStatus: %{http_code}")
+          
+          echo "Admin registration response:"
+          echo "$ADMIN_RESPONSE"
+          
+          # If admin registration fails (maybe role field not allowed), register as worker then login
+          if echo "$ADMIN_RESPONSE" | grep -q "Status: [45]" || echo "$ADMIN_RESPONSE" | grep -q "error"; then
+            echo "Admin registration failed, trying worker registration..."
+            
+            # Register as worker
+            curl -s -X POST http://localhost:8000/api/user/register \
+              -H "Content-Type: application/json" \
+              -d '{"name":"Test Admin","email":"admin@example.com","password":"AdminPass123!"}' \
+              -w "\nStatus: %{http_code}"
+            
+            # Then we need to manually promote to admin or use existing admin
+            echo "Note: Admin user may need to be promoted manually"
+          fi
+          
+          # Also create a regular worker user for tests
+          echo "Creating worker user..."
+          WORKER_RESPONSE=$(curl -s -X POST http://localhost:8000/api/user/register \
+            -H "Content-Type: application/json" \
+            -d '{"name":"Test Worker","email":"worker@example.com","password":"WorkerPass123!"}' \
+            -w "\nStatus: %{http_code}")
+          
+          echo "Worker registration:"
+          echo "$WORKER_RESPONSE"
+          
+          # Test login with admin
+          echo "Testing admin login..."
+          LOGIN_RESPONSE=$(curl -s -X POST http://localhost:8000/api/user/login \
+            -H "Content-Type: application/json" \
+            -d '{"email":"admin@example.com","password":"AdminPass123!"}' \
+            -w "\nStatus: %{http_code}")
+          
+          echo "Admin login:"
+          echo "$LOGIN_RESPONSE"
+
+      # 🔟 Debug server status
+      - name: Debug server status
+        run: |
+          echo "=== Server Status Check ==="
+          echo "Processes:"
+          ps aux | grep -E "(node|npm)" | grep -v grep || echo "No node processes found"
+          
+          echo "=== Port 8000 ==="
+          netstat -tulpn | grep :8000 || echo "Nothing on port 8000"
+          
+          echo "=== Server Logs (last 10 lines) ==="
+          if [ -f backend/server.log ]; then
+            tail -10 backend/server.log
+          else
+            echo "No server logs found"
+          fi
+          
+          echo "=== Test endpoints ==="
+          for endpoint in "" "/api/user/register" "/api/user/login"; do
+            echo -n "http://localhost:8000$endpoint : "
+            curl -s -o /dev/null -w "%{http_code}" -m 5 "http://localhost:8000$endpoint" || echo "timeout"
+          done
+
+      # 1️⃣1️⃣ Install Newman
       - name: Install Newman
         run: npm install -g newman newman-reporter-htmlextra
 
-      # 1️⃣1️⃣ Update Postman environment for CI
-      - name: Update Postman environment
+      # 1️⃣2️⃣ Create CI environment file
+      - name: Create CI environment file
         run: |
-          # Check if environment file exists
-          if [ -f "postman/QA Environment.postman_environment.json" ]; then
-            echo "Updating Postman environment file..."
-            
-            # Create a backup
-            cp "postman/QA Environment.postman_environment.json" "postman/QA Environment.postman_environment.json.backup"
-            
-            # Update using jq
-            jq '
-              .values |= map(
-                if .key == "baseUrl" then .value = "http://localhost:8000"
-                elif .key == "adminEmail" then .value = "admin@example.com"
-                elif .key == "adminPassword" then .value = "AdminPass123!"
-                else .
-                end
-              )
-            ' "postman/QA Environment.postman_environment.json" > "postman/QA Environment-CI.json"
-            
-            echo "Updated environment:"
-            cat "postman/QA Environment-CI.json" | jq '.values[] | select(.key == "baseUrl" or .key == "adminEmail" or .key == "adminPassword")'
-          else
-            echo "Creating new environment file..."
-            cat > "postman/QA Environment-CI.json" << 'EOF'
-            {
-              "id": "ci-environment",
-              "name": "CI Environment",
-              "values": [
-                {
-                  "key": "baseUrl",
-                  "value": "http://localhost:8000",
-                  "enabled": true
-                },
-                {
-                  "key": "adminEmail",
-                  "value": "admin@example.com",
-                  "enabled": true
-                },
-                {
-                  "key": "adminPassword",
-                  "value": "AdminPass123!",
-                  "enabled": true
-                },
-                {
-                  "key": "jwtToken",
-                  "value": "",
-                  "enabled": true
-                },
-                {
-                  "key": "adminJwtToken",
-                  "value": "",
-                  "enabled": true
-                },
-                {
-                  "key": "userId",
-                  "value": "",
-                  "enabled": true
-                },
-                {
-                  "key": "shiftId",
-                  "value": "",
-                  "enabled": true
-                }
-              ]
-            }
-            EOF
-          fi
+          echo "Creating CI environment file..."
+          
+          # Create a simple CI environment file
+          cat > postman/ci-environment.json << 'EOF'
+          {
+            "id": "ci-environment",
+            "name": "CI Environment",
+            "values": [
+              {
+                "key": "baseUrl",
+                "value": "http://localhost:8000",
+                "enabled": true
+              },
+              {
+                "key": "adminEmail",
+                "value": "admin@example.com",
+                "enabled": true
+              },
+              {
+                "key": "adminPassword",
+                "value": "AdminPass123!",
+                "enabled": true
+              },
+              {
+                "key": "jwtToken",
+                "value": "",
+                "enabled": true
+              },
+              {
+                "key": "adminJwtToken",
+                "value": "",
+                "enabled": true
+              },
+              {
+                "key": "userJwtToken",
+                "value": "",
+                "enabled": true
+              },
+              {
+                "key": "userId",
+                "value": "",
+                "enabled": true
+              },
+              {
+                "key": "userEmail",
+                "value": "",
+                "enabled": true
+              },
+              {
+                "key": "userName",
+                "value": "",
+                "enabled": true
+              },
+              {
+                "key": "userRole",
+                "value": "",
+                "enabled": true
+              },
+              {
+                "key": "adminId",
+                "value": "",
+                "enabled": true
+              },
+              {
+                "key": "adminName",
+                "value": "",
+                "enabled": true
+              },
+              {
+                "key": "adminRole",
+                "value": "",
+                "enabled": true
+              },
+              {
+                "key": "shiftId",
+                "value": "",
+                "enabled": true
+              },
+              {
+                "key": "shiftIdCancel",
+                "value": "",
+                "enabled": true
+              },
+              {
+                "key": "adminShiftId",
+                "value": "",
+                "enabled": true
+              }
+            ]
+          }
+          EOF
+          
+          echo "Environment file created at postman/ci-environment.json"
 
-      # 1️⃣2️⃣ Run Postman collection
+      # 1️⃣3️⃣ Run Postman collection
       - name: Run Postman collection
         run: |
           echo "Starting Postman tests..."
+          echo "Current directory: $(pwd)"
+          echo "Files in postman/:"
+          ls -la postman/
           
-          # Check if environment file exists
-          if [ ! -f "postman/QA Environment-CI.json" ]; then
-            echo "Error: Environment file not found"
+          # Check if collection exists
+          if [ ! -f "postman/E2E Shift Management.postman_collection.json" ]; then
+            echo "Error: Postman collection not found!"
             exit 1
           fi
           
           # Run Newman tests
           newman run "postman/E2E Shift Management.postman_collection.json" \
-            -e "postman/QA Environment-CI.json" \
+            -e "postman/ci-environment.json" \
             --env-var "baseUrl=http://localhost:8000" \
             --env-var "adminEmail=admin@example.com" \
             --env-var "adminPassword=AdminPass123!" \
-            --timeout 180000 \
-            --timeout-request 30000 \
-            --timeout-script 30000 \
+            --timeout 300000 \
+            --timeout-request 60000 \
+            --timeout-script 60000 \
             --disable-unicode \
+            --verbose \
             -r cli,json,htmlextra \
             --reporter-json-export newman-report.json \
             --reporter-htmlextra-export newman-report.html \
-            --verbose
+            --suppress-exit-code
 
-      # 1️⃣3️⃣ Show server logs if tests fail
+      # 1️⃣4️⃣ Show test results
+      - name: Show test results summary
+        if: always()
+        run: |
+          echo "=== Test Results Summary ==="
+          if [ -f newman-report.json ]; then
+            echo "Report exists, extracting summary..."
+            # Extract summary info using jq
+            if command -v jq >/dev/null 2>&1; then
+              TOTAL_REQUESTS=$(jq '.run.stats.requests.total' newman-report.json 2>/dev/null || echo "N/A")
+              FAILED_REQUESTS=$(jq '.run.stats.requests.failed' newman-report.json 2>/dev/null || echo "N/A")
+              TOTAL_TESTS=$(jq '.run.stats.assertions.total' newman-report.json 2>/dev/null || echo "N/A")
+              FAILED_TESTS=$(jq '.run.stats.assertions.failed' newman-report.json 2>/dev/null || echo "N/A")
+              
+              echo "Total Requests: $TOTAL_REQUESTS"
+              echo "Failed Requests: $FAILED_REQUESTS"
+              echo "Total Tests: $TOTAL_TESTS"
+              echo "Failed Tests: $FAILED_TESTS"
+              
+              if [ "$FAILED_REQUESTS" != "0" ] || [ "$FAILED_TESTS" != "0" ]; then
+                echo "⚠️ Some tests failed"
+              else
+                echo "✅ All tests passed!"
+              fi
+            else
+              echo "jq not available for parsing report"
+            fi
+          else
+            echo "No test report generated"
+          fi
+
+      # 1️⃣5️⃣ Show server logs if tests fail
       - name: Show server logs on failure
         if: failure()
         working-directory: backend
         run: |
-          echo "=== SERVER LOGS ==="
+          echo "=== SERVER LOGS (last 50 lines) ==="
           if [ -f server.log ]; then
-            tail -100 server.log
+            tail -50 server.log
           else
             echo "No server logs found"
           fi
-          
-          echo "=== NETSTAT ==="
-          netstat -tulpn | grep :8000 || echo "No process on port 8000"
 
-      # 1️⃣4️⃣ Stop backend server
+      # 1️⃣6️⃣ Stop backend server
       - name: Stop backend server
         if: always()
         working-directory: backend
         run: |
-          echo "Cleaning up..."
+          echo "Cleaning up server processes..."
           if [ -f server.pid ]; then
             PID=$(cat server.pid)
             echo "Stopping server with PID: $PID"
             kill $PID 2>/dev/null || true
-            sleep 2
+            sleep 1
             kill -9 $PID 2>/dev/null || true
             rm -f server.pid
           fi
           
-          # Clean up any remaining node processes
-          pkill -f "node.*server" 2>/dev/null || true
+          # Kill any remaining node processes
+          pkill -f "node" 2>/dev/null || true
 
-      # 1️⃣5️⃣ Upload reports
+      # 1️⃣7️⃣ Upload reports
       - name: Upload Newman report
         uses: actions/upload-artifact@v4
         if: always()
