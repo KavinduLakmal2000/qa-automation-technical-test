@@ -1,0 +1,72 @@
+name: Frontend Playwright Tests
+
+on:
+  push:
+    paths:
+      - "Frontend/**"
+      - ".github/workflows/frontend.yml"
+  pull_request:
+    paths:
+      - "Frontend/**"
+      - ".github/workflows/frontend.yml"
+
+jobs:
+  frontend-tests:
+    runs-on: ubuntu-latest
+
+    # Remove the defaults section if frontend is not in a subdirectory
+    # defaults:
+    #   run:
+    #     working-directory: Frontend
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+          cache: npm
+          # Update the path to your actual package-lock.json location
+          # If frontend is in a subdirectory called "Frontend":
+          cache-dependency-path: Frontend/package-lock.json
+          # If there's no subdirectory, use:
+          # cache-dependency-path: package-lock.json
+
+      - name: Install dependencies
+        # If frontend is in a subdirectory:
+        working-directory: Frontend
+        run: npm ci
+
+      - name: Install Playwright browsers
+        working-directory: Frontend
+        run: npx playwright install --with-deps
+
+      - name: Run Playwright tests
+        working-directory: Frontend
+        run: npx playwright test
+
+      - name: Upload Playwright report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          # Update path based on where playwright generates the report
+          path: Frontend/playwright-report
+
+      # Optional: Add a step to install dependencies if not in Frontend directory
+      - name: Install frontend dependencies (alternative)
+        if: failure()  # Only run if previous install fails
+        run: |
+          # Try to find package.json
+          if [ -f "package.json" ]; then
+            echo "Found package.json in root, installing..."
+            npm ci
+          elif [ -f "Frontend/package.json" ]; then
+            echo "Found package.json in Frontend/, installing..."
+            cd Frontend && npm ci
+          else
+            echo "Error: Could not find package.json"
+            exit 1
+          fi
