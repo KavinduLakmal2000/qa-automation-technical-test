@@ -100,7 +100,7 @@
 									}
 								},
 								"url": {
-									"raw": "{{baseUrl}}/user/register",
+									"raw": "{{baseUrl}}/api/user/register",
 									"host": [
 										"{{baseUrl}}"
 									],
@@ -835,7 +835,7 @@
 							"raw": "{\r\n  \"title\": \"Morning Shift\",\r\n  \"date\": \"{{date}}\",\r\n  \"startTime\": \"{{startTime}}\",\r\n  \"finishTime\": \"{{finishTime}}\",\r\n  \"typeOfShift\": [\"Morning\"],\r\n  \"role\": \"{{adminRole}}\",\r\n  \"user\": \"{{adminId}}\",\r\n  \"location\": {\r\n    \"name\": \"Place A\",\r\n    \"address\": \"London\",\r\n    \"postCode\": \"E1 6AN\",\r\n    \"cordinates\": {\r\n      \"latitude\": 51.5074,\r\n      \"longitude\": -0.1278\r\n    }\r\n  }\r\n}"
 						},
 						"url": {
-							"raw": "{{baseUrl}}/shifts",
+							"raw": "{{baseUrl}}/api/shifts",
 							"host": [
 								"{{baseUrl}}"
 							],
@@ -921,7 +921,7 @@
 							"raw": "{\r\n  \"title\": \"Updated Morning Shift\",\r\n  \"typeOfShift\": [\"Morning\", \"Evening\"],\r\n  \"startTime\": \"08:00\",\r\n  \"finishTime\": \"16:00\",\r\n  \"location\": {\r\n    \"name\": \"Updated Place A\",\r\n    \"address\": \"London\",\r\n    \"postCode\": \"E1 6AN\",\r\n    \"cordinates\": {\r\n      \"latitude\": 51.5080,\r\n      \"longitude\": -0.1280\r\n    }\r\n  }\r\n}\r\n"
 						},
 						"url": {
-							"raw": "{{baseUrl}}/shifts/{{shiftId}}",
+							"raw": "{{baseUrl}}/api/shifts/{{shiftId}}",
 							"host": [
 								"{{baseUrl}}"
 							],
@@ -1048,7 +1048,7 @@
 							"raw": "{\r\n  \"title\": \"Morning Shift\",\r\n  \"date\": \"{{date}}\",\r\n  \"startTime\": \"{{startTime}}\",\r\n  \"finishTime\": \"{{finishTime}}\",\r\n  \"typeOfShift\": [\"Morning\"],\r\n  \"role\": \"{{userRole}}\",\r\n  \"user\": \"{{userId}}\",\r\n  \"location\": {\r\n    \"name\": \"Place B\",\r\n    \"address\": \"London\",\r\n    \"postCode\": \"E1 6AN\",\r\n    \"cordinates\": {\r\n      \"latitude\": 51.5074,\r\n      \"longitude\": -0.1278\r\n    }\r\n  }\r\n}"
 						},
 						"url": {
-							"raw": "{{baseUrl}}/shifts",
+							"raw": "{{baseUrl}}/api/shifts",
 							"host": [
 								"{{baseUrl}}"
 							],
@@ -1174,7 +1174,7 @@
 							"raw": "{\r\n  \"title\": \"Morning Shift\",\r\n  \"date\": \"{{date}}\",\r\n  \"startTime\": \"{{startTime}}\",\r\n  \"finishTime\": \"{{finishTime}}\",\r\n  \"typeOfShift\": [\"Morning\"],\r\n  \"role\": \"{{userRole}}\",\r\n  \"user\": \"{{userId}}\",\r\n  \"location\": {\r\n    \"name\": \"Place B\",\r\n    \"address\": \"London\",\r\n    \"postCode\": \"E1 6AN\",\r\n    \"cordinates\": {\r\n      \"latitude\": 51.5074,\r\n      \"longitude\": -0.1278\r\n    }\r\n  }\r\n}"
 						},
 						"url": {
-							"raw": "{{baseUrl}}/shifts",
+							"raw": "{{baseUrl}}/api/shifts",
 							"host": [
 								"{{baseUrl}}"
 							],
@@ -1296,7 +1296,7 @@
 							"raw": ""
 						},
 						"url": {
-							"raw": "{{baseUrl}}/shifts",
+							"raw": "{{baseUrl}}/api/shifts",
 							"host": [
 								"{{baseUrl}}"
 							],
@@ -1350,7 +1350,7 @@
 							"raw": ""
 						},
 						"url": {
-							"raw": "{{baseUrl}}/shifts?user={{userId}}&page=1&limit=10",
+							"raw": "{{baseUrl}}/api/shifts?user={{userId}}&page=1&limit=10",
 							"host": [
 								"{{baseUrl}}"
 							],
@@ -1419,7 +1419,7 @@
 							}
 						},
 						"url": {
-							"raw": "{{baseUrl}}/shifts/{{shiftId}}/clock-in",
+							"raw": "{{baseUrl}}/api/shifts/{{shiftId}}/clock-in",
 							"host": [
 								"{{baseUrl}}"
 							],
@@ -1483,7 +1483,7 @@
 							}
 						},
 						"url": {
-							"raw": "{{baseUrl}}/shifts/{{shiftId}}/clock-out",
+							"raw": "{{baseUrl}}/api/shifts/{{shiftId}}/clock-out",
 							"host": [
 								"{{baseUrl}}"
 							],
@@ -1550,7 +1550,7 @@
 							}
 						},
 						"url": {
-							"raw": "{{baseUrl}}/shifts/{{shiftIdCancel}}/cancel",
+							"raw": "{{baseUrl}}/api/shifts/{{shiftIdCancel}}/cancel",
 							"host": [
 								"{{baseUrl}}"
 							],
@@ -1619,7 +1619,7 @@
 							}
 						},
 						"url": {
-							"raw": "{{baseUrl}}/shifts/{{adminShiftId}}/clock-in",
+							"raw": "{{baseUrl}}/api/shifts/{{adminShiftId}}/clock-in",
 							"host": [
 								"{{baseUrl}}"
 							],
@@ -1688,7 +1688,7 @@
 							}
 						},
 						"url": {
-							"raw": "{{baseUrl}}/shifts/{{adminShiftId}}/clock-out",
+							"raw": "{{baseUrl}}/api/shifts/{{adminShiftId}}/clock-out",
 							"host": [
 								"{{baseUrl}}"
 							],
@@ -1741,7 +1741,7 @@
 							}
 						},
 						"url": {
-							"raw": "{{baseUrl}}/shifts/{{adminShiftId}}",
+							"raw": "{{baseUrl}}/api/shifts/{{adminShiftId}}",
 							"host": [
 								"{{baseUrl}}"
 							],
@@ -1793,7 +1793,7 @@
 							}
 						},
 						"url": {
-							"raw": "{{baseUrl}}/shifts/{{shiftIdCancel}}",
+							"raw": "{{baseUrl}}/api/shifts/{{shiftIdCancel}}",
 							"host": [
 								"{{baseUrl}}"
 							],
@@ -1845,7 +1845,7 @@
 							}
 						},
 						"url": {
-							"raw": "{{baseUrl}}/shifts/{{shiftId}}",
+							"raw": "{{baseUrl}}/api/shifts/{{shiftId}}",
 							"host": [
 								"{{baseUrl}}"
 							],
