@@ -2,22 +2,16 @@ name: Frontend Playwright Tests
 
 on:
   push:
-    paths:
-      - "Frontend/**"
-      - ".github/workflows/frontend.yml"
+    branches:
+      - main
+      - develop
   pull_request:
-    paths:
-      - "Frontend/**"
-      - ".github/workflows/frontend.yml"
+    branches:
+      - main
 
 jobs:
   frontend-tests:
     runs-on: ubuntu-latest
-
-    # Remove the defaults section if frontend is not in a subdirectory
-    # defaults:
-    #   run:
-    #     working-directory: Frontend
 
     steps:
       - name: Checkout repository
@@ -28,14 +22,9 @@ jobs:
         with:
           node-version: 18
           cache: npm
-          # Update the path to your actual package-lock.json location
-          # If frontend is in a subdirectory called "Frontend":
           cache-dependency-path: Frontend/package-lock.json
-          # If there's no subdirectory, use:
-          # cache-dependency-path: package-lock.json
 
       - name: Install dependencies
-        # If frontend is in a subdirectory:
         working-directory: Frontend
         run: npm ci
 
@@ -43,30 +32,85 @@ jobs:
         working-directory: Frontend
         run: npx playwright install --with-deps
 
+      - name: Setup environment variables
+        working-directory: Frontend
+        run: |
+          echo "Creating .env file for CI..."
+          echo "VITE_API_URL=http://localhost:8000/api" > .env
+          echo "VITE_APP_ENV=test" >> .env
+          cat .env
+
+      - name: Start frontend development server
+        working-directory: Frontend
+        run: |
+          echo "Starting frontend server in background..."
+          # Start the dev server in background
+          npm run dev &
+          SERVER_PID=$!
+          echo $SERVER_PID > server.pid
+          
+          echo "Waiting for server to start..."
+          # Wait for server to be ready
+          for i in {1..30}; do
+            if curl -s -f http://localhost:5173 > /dev/null 2>&1; then
+              echo "✅ Frontend server is responding"
+              break
+            fi
+            echo "Waiting for server... ($i/30)"
+            sleep 2
+          done
+          
+          # Check if server started
+          if ! ps -p $SERVER_PID > /dev/null 2>&1; then
+            echo "❌ Server process died"
+            if [ -f npm-debug.log ]; then
+              echo "Server logs:"
+              tail -50 npm-debug.log
+            fi
+            exit 1
+          fi
+
+      - name: Verify frontend is accessible
+        run: |
+          echo "Testing frontend access..."
+          curl -s -o /dev/null -w "HTTP Status: %{http_code}\n" -m 10 http://localhost:5173 || echo "Failed to connect"
+
       - name: Run Playwright tests
         working-directory: Frontend
-        run: npx playwright test
+        run: |
+          echo "Running Playwright tests..."
+          # Set timeout and retries
+          npx playwright test \
+            --timeout=30000 \
+            --retries=2 \
+            --reporter=html,line
+
+      - name: Stop frontend server
+        if: always()
+        working-directory: Frontend
+        run: |
+          echo "Stopping frontend server..."
+          if [ -f server.pid ]; then
+            PID=$(cat server.pid)
+            echo "Stopping server with PID: $PID"
+            kill $PID 2>/dev/null || true
+            sleep 1
+            kill -9 $PID 2>/dev/null || true
+            rm -f server.pid
+          fi
+          # Clean up any remaining processes
+          pkill -f "vite" 2>/dev/null || true
 
       - name: Upload Playwright report
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: playwright-report
-          # Update path based on where playwright generates the report
-          path: Frontend/playwright-report
+          path: Frontend/playwright-report/
 
-      # Optional: Add a step to install dependencies if not in Frontend directory
-      - name: Install frontend dependencies (alternative)
-        if: failure()  # Only run if previous install fails
-        run: |
-          # Try to find package.json
-          if [ -f "package.json" ]; then
-            echo "Found package.json in root, installing..."
-            npm ci
-          elif [ -f "Frontend/package.json" ]; then
-            echo "Found package.json in Frontend/, installing..."
-            cd Frontend && npm ci
-          else
-            echo "Error: Could not find package.json"
-            exit 1
-          fi
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: Frontend/test-results/
