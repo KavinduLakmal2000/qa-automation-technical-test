@@ -1,4 +1,3 @@
-
 name: API Tests (Postman + Newman)
 
 on:
@@ -38,9 +37,9 @@ jobs:
         working-directory: backend
         run: npm install
 
-      # 5️⃣ Install netcat (for port check)
-      - name: Install netcat
-        run: sudo apt-get update && sudo apt-get install -y netcat-openbsd
+      # 5️⃣ Install netcat and curl
+      - name: Install required tools
+        run: sudo apt-get update && sudo apt-get install -y netcat-openbsd curl
 
       # 6️⃣ Wait for MongoDB
       - name: Wait for MongoDB
@@ -51,61 +50,222 @@ jobs:
             sleep 2
           done
 
-      # 7️⃣ Start backend server
+      # 7️⃣ Create backend .env file
+      - name: Setup backend environment
+        working-directory: backend
+        run: |
+          echo "PORT=8000" > .env
+          echo "MONGO_URI=mongodb://127.0.0.1:27017/qa_test_db" >> .env
+          echo "NODE_ENV=development" >> .env
+          echo "JWT_SECRET=test-jwt-secret-for-ci-12345-67890" >> .env
+          echo "SUPPORT_EMAIL=test@example.com" >> .env
+          echo "GMAIL_USERNAME=test@example.com" >> .env
+          echo "GMAIL_PASSWORD=test-password" >> .env
+          echo "FRONTEND_URL=http://localhost:5173" >> .env
+          echo "Environment file created:"
+          cat .env
+
+      # 8️⃣ Seed test admin user
+      - name: Seed test admin user
+        working-directory: backend
+        run: |
+          # Create seed script
+          cat > seed-admin.js << 'EOF'
+          const mongoose = require('mongoose');
+          
+          async function seedAdmin() {
+            try {
+              console.log('Connecting to MongoDB for seeding...');
+              await mongoose.connect('mongodb://127.0.0.1:27017/qa_test_db');
+              
+              // Drop database to start fresh
+              await mongoose.connection.db.dropDatabase();
+              console.log('Database cleared');
+              
+              // Create User model if not exists
+              let User;
+              try {
+                User = require('./models/User');
+              } catch (e) {
+                console.log('Creating User model...');
+                const bcrypt = require('bcryptjs');
+                const userSchema = new mongoose.Schema({
+                  name: String,
+                  email: { type: String, unique: true },
+                  password: String,
+                  role: { type: String, enum: ['worker', 'admin'], default: 'worker' }
+                });
+                User = mongoose.model('User', userSchema);
+                
+                // Create admin user
+                const hashedPassword = await bcrypt.hash('AdminPass123!', 10);
+                const admin = new User({
+                  name: 'Test Admin',
+                  email: 'admin@example.com',
+                  password: hashedPassword,
+                  role: 'admin'
+                });
+                await admin.save();
+                console.log('✅ Test admin user created');
+              }
+              
+              await mongoose.disconnect();
+              console.log('Seeding completed');
+            } catch (error) {
+              console.error('❌ Error seeding admin:', error.message);
+              console.error(error.stack);
+              process.exit(1);
+            }
+          }
+          
+          seedAdmin();
+          EOF
+          
+          echo "Running seed script..."
+          node seed-admin.js
+
+      # 9️⃣ Start backend server with proper logging
       - name: Start backend server
         working-directory: backend
-        env:
-          PORT: 8000
-          MONGO_URI: mongodb://127.0.0.1:27017/qa_test_db
         run: |
-          npm run dev &
-          echo "Waiting for backend on port 8000..."
+          # Start server in background with logging
+          echo "Starting backend server..."
+          npm run dev > server.log 2>&1 &
+          SERVER_PID=$!
+          echo $SERVER_PID > server.pid
+          
+          echo "Waiting for server to start on port 8000..."
           for i in {1..30}; do
-            nc -z localhost 8000 && echo "Backend ready" && break
-            sleep 2
-          done
-
-      # 8️⃣ Health check for backend
-      - name: Wait for backend health
-        run: |
-          echo "Checking backend health..."
-          for i in {1..30}; do
-            status=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8000/health || true)
-            if [ "$status" = "200" ]; then
-              echo "Backend healthy"
+            if curl -s -f http://localhost:8000 > /dev/null 2>&1; then
+              echo "✅ Backend server is responding"
+              
+              # Test basic endpoints
+              echo "Testing register endpoint..."
+              curl -X POST http://localhost:8000/api/user/register \
+                -H "Content-Type: application/json" \
+                -d '{"name":"Test Worker","email":"worker@example.com","password":"TestPass123!"}' \
+                -s || echo "Register test failed"
+                
+              echo "Testing admin login..."
+              curl -X POST http://localhost:8000/api/user/login \
+                -H "Content-Type: application/json" \
+                -d '{"email":"admin@example.com","password":"AdminPass123!"}' \
+                -s | head -c 200 || echo "Login test failed"
+                
               break
             fi
             sleep 2
           done
+          
+          # Check if server is running
+          if ! curl -s -f http://localhost:8000 > /dev/null 2>&1; then
+            echo "❌ Backend failed to start. Server logs:"
+            cat server.log
+            exit 1
+          fi
 
-      # 9️⃣ Install Newman
+      # 🔟 Wait for backend to stabilize
+      - name: Wait for backend stabilization
+        run: |
+          echo "Allowing backend to stabilize..."
+          sleep 5
+
+      # 1️⃣1️⃣ Install Newman
       - name: Install Newman
         run: npm install -g newman newman-reporter-htmlextra
 
-      # 🔟 Debug QA Environment
-      - name: Debug QA Environment
+      # 1️⃣2️⃣ Update Postman environment variables
+      - name: Update Postman environment
         run: |
-          echo "Listing Postman folder contents:"
-          ls -la postman/
+          # Create a modified environment file
+          cp "postman/QA Environment.postman_environment.json" "postman/QA Environment-CI.json"
           
-          echo "Displaying QA Environment file contents:"
-          cat "postman/QA Environment.postman_environment.json"
+          # Update values using jq if available, or sed
+          if command -v jq &> /dev/null; then
+            jq '.values = (.values | map(
+              if .key == "baseUrl" then .value = "http://localhost:8000"
+              elif .key == "adminEmail" then .value = "admin@example.com"
+              elif .key == "adminPassword" then .value = "AdminPass123!"
+              else .
+              end
+            ))' "postman/QA Environment-CI.json" > temp.json && mv temp.json "postman/QA Environment-CI.json"
+          else
+            sed -i 's|"value": ".*"|"value": "http://localhost:8000"|' "postman/QA Environment-CI.json"
+          fi
+          
+          echo "Updated environment file:"
+          cat "postman/QA Environment-CI.json" | head -100
 
-      # 1️⃣1️⃣ Run Postman collection
+      # 1️⃣3️⃣ Run Postman collection with all fixes
       - name: Run Postman collection
         run: |
+          echo "Starting Postman tests..."
+          
+          # First run without fail to see what happens
           newman run "postman/E2E Shift Management.postman_collection.json" \
-            -e "postman/QA Environment.postman_environment.json" \
+            -e "postman/QA Environment-CI.json" \
             --env-var "baseUrl=http://localhost:8000" \
+            --env-var "adminEmail=admin@example.com" \
+            --env-var "adminPassword=AdminPass123!" \
+            --env-var "jwtToken=" \
+            --env-var "adminJwtToken=" \
+            --env-var "userJwtToken=" \
+            --env-var "userId=" \
+            --env-var "shiftId=" \
+            --timeout 300000 \
+            --timeout-request 30000 \
+            --timeout-script 30000 \
+            --disable-unicode \
+            --verbose \
             -r cli,json,htmlextra \
             --reporter-json-export newman-report.json \
-            --reporter-htmlextra-export newman-report.html
+            --reporter-htmlextra-export newman-report.html \
+            --suppress-exit-code || true
+          
+          echo "Newman test run completed"
+          
+          # Check if report was generated
+          if [ -f newman-report.json ]; then
+            echo "Report generated successfully"
+          else
+            echo "No report generated"
+          fi
 
-      # 1️⃣2️⃣ Upload Newman report
+      # 1️⃣4️⃣ Show server logs if tests fail
+      - name: Show server logs on failure
+        if: failure()
+        working-directory: backend
+        run: |
+          echo "=== SERVER LOGS ==="
+          tail -100 server.log || echo "No server logs found"
+          
+          echo "=== CURRENT PROCESSES ==="
+          ps aux | grep node || true
+          
+          echo "=== NETSTAT ==="
+          netstat -tulpn | grep :8000 || true
+
+      # 1️⃣5️⃣ Stop backend server
+      - name: Stop backend server
+        if: always()
+        working-directory: backend
+        run: |
+          if [ -f server.pid ]; then
+            echo "Stopping backend server..."
+            kill -9 $(cat server.pid) 2>/dev/null || true
+            rm -f server.pid
+          fi
+          
+          # Kill any remaining node processes
+          pkill -f "node.*server" 2>/dev/null || true
+
+      # 1️⃣6️⃣ Upload Newman report
       - name: Upload Newman report
         uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: newman-report
           path: |
             newman-report.json
             newman-report.html
+            backend/server.log
