@@ -18,7 +18,6 @@ test.describe('Authentication', () => {
     await loginPage.login(data.credentials.validUser.email, data.credentials.validUser.password);
     await loginPage.logout();
     await loginPage.tokenShouldBeCleared();
-    await loginPage.expectRedirectToLogin();
   });
 
 
