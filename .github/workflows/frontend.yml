@@ -14,56 +14,73 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      # Clone both frontend AND backend
       - name: Clone frontend app
         run: |
           git clone https://github.com/Wahhab1801/automation-engineer-test-fe.git frontend-app
+
+      - name: Clone backend app
+        run: |
+          git clone https://github.com/Wahhab1801/automation-engineer-test-be.git backend-app
 
       - name: Setup Node.js 20
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: 'npm'
-          cache-dependency-path: |
-            frontend-app/package-lock.json
-            Frontend/package-lock.json
 
+      # Start MongoDB for backend
+      - name: Start MongoDB
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y mongodb
+          sudo systemctl start mongodb
+          sudo systemctl status mongodb
+          mongod --version
+
+      # Setup and start backend first
+      - name: Setup and start backend
+        working-directory: backend-app
+        run: |
+          echo "Setting up backend..."
+          npm ci
+          
+          # Create .env file for backend
+          cat > .env << 'EOF'
+          MONGO_URI=mongodb://localhost:27017/orta_test
+          PORT=8000
+          NODE_ENV=test
+          JWT_SECRET=test-jwt-secret-for-ci-12345-67890
+          SUPPORT_EMAIL=test@example.com
+          GMAIL_USERNAME=test@example.com
+          GMAIL_PASSWORD=testpassword
+          FRONTEND_URL=http://localhost:5173
+          EOF
+          
+          echo "Starting backend server..."
+          npm start &
+          echo $! > server.pid
+          
+          # Wait for backend
+          echo "Waiting for backend server..."
+          for i in {1..30}; do
+            if curl -s http://localhost:8000/health > /dev/null 2>&1 || curl -s http://localhost:8000 > /dev/null 2>&1; then
+              echo "✅ Backend server is ready"
+              break
+            fi
+            echo "Waiting for backend... ($i/30)"
+            sleep 2
+          done
+
+      # Setup and start frontend
       - name: Install frontend deps
         working-directory: frontend-app
         run: npm ci
 
-      - name: Install test deps
-        working-directory: Frontend
-        run: npm ci
-
-      - name: Install Playwright
-        working-directory: Frontend
-        run: npx playwright install --with-deps
-
-      - name: Ensure playwright.config.js exists
+      - name: Install test deps and Playwright
         working-directory: Frontend
         run: |
-          if [ ! -f playwright.config.js ]; then
-            echo "Creating playwright.config.js..."
-            cat > playwright.config.js << 'EOF'
-          const { defineConfig } = require('@playwright/test');
-
-          module.exports = defineConfig({
-            testDir: './tests',
-            fullyParallel: true,
-            forbidOnly: !!process.env.CI,
-            retries: process.env.CI ? 2 : 0,
-            workers: process.env.CI ? 1 : undefined,
-            reporter: 'html',
-            use: {
-              baseURL: process.env.BASE_URL || 'http://localhost:5173',
-              trace: 'on-first-retry',
-              screenshot: 'only-on-failure',
-              video: 'retain-on-failure',
-            },
-            timeout: 30000,
-          });
-          EOF
-          fi
+          npm ci
+          npx playwright install --with-deps
 
       - name: Start frontend server
         working-directory: frontend-app
@@ -72,25 +89,66 @@ jobs:
           npm run dev &
           echo $! > server.pid
           
+          echo "Waiting for frontend server..."
           for i in {1..15}; do
-            curl -s http://localhost:5173 && echo "✅ Server ready" && break
+            if curl -s http://localhost:5173 > /dev/null 2>&1; then
+              echo "✅ Frontend server is ready"
+              break
+            fi
             sleep 2
           done
+
+      - name: Create test users
+        run: |
+          echo "Creating test users via API..."
+          # Register test user
+          curl -X POST http://localhost:8000/api/user/register \
+            -H "Content-Type: application/json" \
+            -d '{"name":"Test User","email":"test@example.com","password":"TestPass123!"}' \
+            -w "\nStatus: %{http_code}\n"
+          
+          # Also create the specific users from the PDF
+          curl -X POST http://localhost:8000/api/user/register \
+            -H "Content-Type: application/json" \
+            -d '{"name":"John Doe","email":"john@example.com","password":"StrongPass123!"}' \
+            -w "\nStatus: %{http_code}\n"
+          
+          curl -X POST http://localhost:8000/api/user/register \
+            -H "Content-Type: application/json" \
+            -d '{"name":"Alice Smith","email":"alice@example.com","password":"StrongPass123!"}' \
+            -w "\nStatus: %{http_code}\n"
+
+      - name: Verify services
+        run: |
+          echo "=== Service Status ==="
+          echo "Backend (port 8000):"
+          curl -s -o /dev/null -w "HTTP: %{http_code}\n" -m 5 http://localhost:8000 || echo "Failed"
+          
+          echo "Frontend (port 5173):"
+          curl -s -o /dev/null -w "HTTP: %{http_code}\n" -m 5 http://localhost:5173 || echo "Failed"
 
       - name: Run tests
         working-directory: Frontend
         env:
           BASE_URL: "http://localhost:5173"
         run: |
-          echo "Running Playwright tests against: $BASE_URL"
+          echo "Running Playwright tests..."
           npx playwright test
 
       - name: Cleanup
         if: always()
         run: |
+          echo "Cleaning up..."
+          # Stop frontend
           if [ -f frontend-app/server.pid ]; then
             kill $(cat frontend-app/server.pid) 2>/dev/null || true
           fi
+          # Stop backend
+          if [ -f backend-app/server.pid ]; then
+            kill $(cat backend-app/server.pid) 2>/dev/null || true
+          fi
+          # Stop MongoDB
+          sudo systemctl stop mongodb 2>/dev/null || true
 
       - name: Upload report
         if: always()
