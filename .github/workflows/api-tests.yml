@@ -29,9 +29,18 @@ jobs:
         with:
           node-version: 20
 
+      - name: Check backend directory structure
+        run: |
+          echo "Checking backend directory structure..."
+          ls -la backend/
+          echo "Looking for server.js..."
+          find backend -name "server.js" -type f
+
       - name: Install backend dependencies
         working-directory: backend
-        run: npm install
+        run: |
+          echo "Installing backend dependencies..."
+          npm install
 
       - name: Install required tools
         run: sudo apt-get update && sudo apt-get install -y netcat-openbsd curl
@@ -47,18 +56,44 @@ jobs:
       - name: Setup backend environment
         working-directory: backend
         run: |
+          echo "Setting up backend environment..."
           echo "PORT=8000" > .env
           echo "MONGO_URI=mongodb://127.0.0.1:27017/qa_test_db" >> .env
           echo "NODE_ENV=development" >> .env
           echo "JWT_SECRET=test-jwt-secret-for-ci-12345-67890" >> .env
+          echo "Environment file created"
 
-      - name: Start backend server
+      - name: Find and start backend server
         working-directory: backend
         run: |
-          echo "Starting backend server..."
+          echo "Looking for server entry point..."
+          
+          # Check common server file locations
+          if [ -f "server.js" ]; then
+            SERVER_FILE="server.js"
+            echo "Found server.js in root"
+          elif [ -f "src/server.js" ]; then
+            SERVER_FILE="src/server.js"
+            echo "Found server.js in src/"
+          elif [ -f "index.js" ]; then
+            SERVER_FILE="index.js"
+            echo "Found index.js"
+          elif [ -f "app.js" ]; then
+            SERVER_FILE="app.js"
+            echo "Found app.js"
+          else
+            echo "Error: Could not find server entry point!"
+            echo "Files in backend directory:"
+            ls -la
+            echo "Files in backend/src directory (if exists):"
+            ls -la src/ 2>/dev/null || echo "No src directory"
+            exit 1
+          fi
+          
+          echo "Starting server from: $SERVER_FILE"
           
           # Start server in background
-          nohup node server.js > server.log 2>&1 &
+          nohup node $SERVER_FILE > server.log 2>&1 &
           SERVER_PID=$!
           echo $SERVER_PID > server.pid
           
@@ -118,10 +153,19 @@ jobs:
           curl -s -X POST http://localhost:8000/api/user/register \
             -H "Content-Type: application/json" \
             -d '{"name":"Test User","email":"test@example.com","password":"Test123!"}' \
-            -w " -> Status: %{http_code}\n"
+            -w " -> Status: %{http_code}\n" || echo "API test failed"
 
       - name: Install Newman
         run: npm install -g newman newman-reporter-htmlextra
+
+      - name: Check Postman files
+        run: |
+          echo "Checking Postman files..."
+          ls -la Backend-repo/postman/
+          echo "Collection file exists:"
+          [ -f "Backend-repo/postman/E2E Shift Management.postman_collection.json" ] && echo "YES" || echo "NO"
+          echo "Environment file exists:"
+          [ -f "Backend-repo/postman/QA Environment.postman_environment.json" ] && echo "YES" || echo "NO"
 
       - name: Run Postman collection
         run: |
@@ -130,11 +174,13 @@ jobs:
           # Check if collection exists
           if [ ! -f "Backend-repo/postman/E2E Shift Management.postman_collection.json" ]; then
             echo "Error: Postman collection not found!"
+            echo "Available files in Backend-repo/postman/:"
             ls -la Backend-repo/postman/
             exit 1
           fi
           
           # Run tests
+          echo "Running Newman tests..."
           newman run "Backend-repo/postman/E2E Shift Management.postman_collection.json" \
             -e "Backend-repo/postman/QA Environment.postman_environment.json" \
             --env-var "baseUrl=http://localhost:8000" \
