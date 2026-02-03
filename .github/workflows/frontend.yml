@@ -71,9 +71,42 @@ jobs:
         working-directory: Frontend
         env:
           BASE_URL: "http://localhost:5173"
+          PLAYWRIGHT_JSON_OUTPUT_NAME: "playwright-report.json"
         run: |
           echo "Running Playwright tests against local frontend with LIVE backend..."
-          npx playwright test
+          npx playwright test --reporter=list,json
+
+      - name: Show test results summary
+        if: always()
+        working-directory: Frontend
+        run: |
+          echo "### Playwright Test Execution Summary" >> $GITHUB_STEP_SUMMARY
+          
+          if [ -f playwright-report.json ]; then
+            if ! command -v jq &> /dev/null; then
+              sudo apt-get update && sudo apt-get install -y jq
+            fi
+            
+            PASSED=$(jq '.stats.expected // 0' playwright-report.json)
+            FAILED=$(jq '.stats.unexpected // 0' playwright-report.json)
+            SKIPPED=$(jq '.stats.skipped // 0' playwright-report.json)
+            FLAKY=$(jq '.stats.flaky // 0' playwright-report.json)
+            TOTAL=$((PASSED + FAILED + SKIPPED + FLAKY))
+            DURATION=$(jq '.stats.duration // 0' playwright-report.json)
+            DURATION_SEC=$(awk "BEGIN {printf \"%.2f\", $DURATION/1000}")
+            
+            echo "| | executed | failed |" >> $GITHUB_STEP_SUMMARY
+            echo "|---|---|---|" >> $GITHUB_STEP_SUMMARY
+            echo "| **Tests** | $TOTAL | $FAILED |" >> $GITHUB_STEP_SUMMARY
+            echo "| **Passed** | $PASSED | 0 |" >> $GITHUB_STEP_SUMMARY
+            echo "| **Skipped** | $SKIPPED | 0 |" >> $GITHUB_STEP_SUMMARY
+            echo "| **Flaky** | $FLAKY | 0 |" >> $GITHUB_STEP_SUMMARY
+            
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "**Total run duration:** ${DURATION_SEC}s" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "No JSON report found." >> $GITHUB_STEP_SUMMARY
+          fi
 
       - name: Cleanup
         if: always()
