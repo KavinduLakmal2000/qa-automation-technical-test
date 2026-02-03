@@ -71,9 +71,10 @@ jobs:
         working-directory: Frontend
         env:
           BASE_URL: "http://localhost:5173"
+          PLAYWRIGHT_JSON_OUTPUT_NAME: "playwright-report.json"
         run: |
           echo "Running Playwright tests against local frontend with LIVE backend..."
-          npx playwright test --reporter=list,json:playwright-report.json
+          npx playwright test --reporter=list,json
 
       - name: Show test results summary
         if: always()
