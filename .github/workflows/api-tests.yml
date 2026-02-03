@@ -164,7 +164,7 @@ jobs:
           # We check for status 200 (created) or 400 (user already exists), both are acceptable here.
           REGISTER_RESPONSE=$(curl -s -X POST http://localhost:8000/api/user/register \
             -H "Content-Type: application/json" \
-            -d '{"name":"Admin User","email":"admin@example.com","password":"AdminPass123!"}' \
+            -d '{"name":"Admin User","email":"john@example.com","password":"StrongPass123!"}' \
             -w "\nStatus: %{http_code}")
           
           echo "Admin user registration response: $REGISTER_RESPONSE"
@@ -174,7 +174,7 @@ jobs:
             exit 1
           fi
           
-          echo "User 'admin@example.com' registered. Now promoting to admin role directly in the database."
+          echo "User 'john@example.com' registered. Now promoting to admin role directly in the database."
           
           # We need to elevate this user to 'admin'. The API for promotion requires admin rights,
           # creating a chicken-and-egg problem for the first admin. So, we'll update the role directly in MongoDB.
@@ -183,12 +183,12 @@ jobs:
             mongoose.connect('mongodb://127.0.0.1:27017/qa_test_db')
               .then(() => {
                 console.log('Connected to DB for admin promotion.');
-                return mongoose.connection.db.collection('users').updateOne({ email: 'admin@example.com' }, { \$set: { role: 'admin' } });
+                return mongoose.connection.db.collection('users').updateOne({ email: 'john@example.com' }, { \$set: { role: 'admin' } });
               })
               .then(result => {
-                if (result.matchedCount === 0) throw new Error('User admin@example.com not found in database.');
-                if (result.modifiedCount === 1) console.log('Successfully promoted admin@example.com to admin.');
-                else console.log('User admin@example.com was already an admin.');
+                if (result.matchedCount === 0) throw new Error('User john@example.com not found in database.');
+                if (result.modifiedCount === 1) console.log('Successfully promoted john@example.com to admin.');
+                else console.log('User john@example.com was already an admin.');
                 return mongoose.disconnect();
               })
               .catch(err => {
@@ -196,6 +196,23 @@ jobs:
                 process.exit(1);
               });
           "
+
+      - name: Create worker user for testing
+        working-directory: backend
+        run: |
+          echo "Creating worker user for testing..."
+          
+          REGISTER_RESPONSE=$(curl -s -X POST http://localhost:8000/api/user/register \
+            -H "Content-Type: application/json" \
+            -d '{"name":"Worker User","email":"testUser1@example.com","password":"StrongPass123!"}' \
+            -w "\nStatus: %{http_code}")
+          
+          echo "Worker user registration response: $REGISTER_RESPONSE"
+          
+          if [[ ! "$REGISTER_RESPONSE" =~ "Status: 200" && ! "$REGISTER_RESPONSE" =~ "Status: 400" ]]; then
+            echo "Worker user registration failed with an unexpected status."
+            exit 1
+          fi
 
       - name: Install Newman
         run: npm install -g newman newman-reporter-htmlextra
@@ -226,8 +243,10 @@ jobs:
           newman run "Backend-repo/postman/E2E Shift Management.postman_collection.json" \
             -e "Backend-repo/postman/QA Environment.postman_environment.json" \
             --env-var "baseUrl=http://localhost:8000" \
-            --env-var "adminEmail=admin@example.com" \
-            --env-var "adminPassword=AdminPass123!" \
+            --env-var "adminEmail=john@example.com" \
+            --env-var "adminPassword=StrongPass123!" \
+            --env-var "workerEmail=testUser1@example.com" \
+            --env-var "workerPassword=StrongPass123!" \
             --timeout 300000 \
             --timeout-request 60000 \
             --timeout-script 60000 \

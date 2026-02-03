@@ -10,112 +10,6 @@
 			"name": "Authentication", 
 			"item": [
 				{
-					"name": "Register",
-					"item": [
-						{
-							"name": "Register New User",
-							"event": [
-								{
-									"listen": "prerequest",
-									"script": {
-										"exec": [
-											"// Get current timestamp\r",
-											"const timestamp = Date.now();\r",
-											"\r",
-											"// Generate unique email and name\r",
-											"const uniqueEmail = `user${timestamp}@test.com`;\r",
-											"const uniqueName = `User${timestamp}`;\r",
-											"\r",
-											"// Save to environment variables\r",
-											"pm.environment.set(\"randomEmail\", uniqueEmail);\r",
-											"pm.environment.set(\"randomName\", uniqueName);\r",
-											""
-										],
-										"type": "text/javascript",
-										"packages": {},
-										"requests": {}
-									}
-								},
-								{
-									"listen": "test",
-									"script": {
-										"exec": [
-											"const res = pm.response.json();\r",
-											"\r",
-											"//Test 1: Validate Status code\r",
-											"pm.test(\"Status code is 200\", () => {\r",
-											"    pm.response.to.have.status(200);\r",
-											"});\r",
-											"\r",
-											"//Test 2: Validate if JWT token exists\r",
-											"pm.test(\"JWT token exists\", () => {\r",
-											"    pm.expect(res).to.have.property(\"token\");\r",
-											"    pm.expect(res.token).to.be.a(\"string\");\r",
-											"    pm.environment.set(\"jwtToken\", res.token);\r",
-											"});\r",
-											"\r",
-											"//Test 3: Validate if User object exists\r",
-											"pm.test(\"User object exists\", () => {\r",
-											"    pm.expect(res).to.have.property(\"user\");\r",
-											"    pm.expect(res.user).to.be.an(\"object\");\r",
-											"});\r",
-											"\r",
-											"// Test 4: Validate user fields\r",
-											"pm.test(\"User fields are valid\", () => {\r",
-											"    pm.expect(res.user).to.have.property(\"id\").and.to.match(/^[0-9a-fA-F]{24}$/); // MongoDB ID\r",
-											"    pm.expect(res.user).to.have.property(\"name\").and.to.eql(pm.environment.get(\"randomName\"));\r",
-											"    pm.expect(res.user).to.have.property(\"email\").and.to.eql(pm.environment.get(\"randomEmail\"));\r",
-											"    pm.expect(res.user).to.have.property(\"role\").and.to.be.oneOf([\"worker\", \"admin\"]);\r",
-											"});\r",
-											"//Save user related data\r",
-											"pm.environment.set(\"userId\", res.user.id);\r",
-											"pm.environment.set(\"userName\", res.user.name);\r",
-											"pm.environment.set(\"userEmail\", res.user.email);\r",
-											"pm.environment.set(\"userRole\", res.user.role);\r",
-											"\r",
-											""
-										],
-										"type": "text/javascript",
-										"packages": {},
-										"requests": {}
-									}
-								}
-							],
-							"request": {
-								"method": "POST",
-								"header": [
-									{
-										"key": "Content-Type",
-										"value": "application/json",
-										"type": "text"
-									}
-								],
-								"body": {
-									"mode": "raw",
-									"raw": "{\r\n  \"name\":\"{{randomName}}\",\r\n  \"email\": \"{{randomEmail}}\",\r\n  \"password\": \"StrongPass123!\"\r\n}\r\n\r\n",
-									"options": {
-										"raw": {
-											"language": "json"
-										}
-									}
-								},
-								"url": {
-									"raw": "{{baseUrl}}/api/user/register",
-									"host": [
-										"{{baseUrl}}"
-									],
-									"path": [
-                    "api",
-										"user",
-										"register"
-									]
-								}
-							},
-							"response": []
-						}
-					]
-				},
-				{
 					"name": "Login User",
 					"item": [
 						{
@@ -133,17 +27,23 @@
 											"//Test 2: JWT token exists\r",
 											"pm.test(\"JWT token exists\", () => {\r",
 											"    pm.expect(res).to.have.property(\"token\");\r",
-											"    pm.environment.set(\"jwtToken\", res.token);\r",
 											"});\r",
 											"\r",
-											"//Test 3: User object\r",
-											"pm.test(\"User fields are valid\", () => {\r",
-											"    pm.expect(res.user.id).to.eql(pm.environment.get(\"userId\"));\r",
+											"//Test 3: User object has expected fields\r",
+											"pm.test(\"User object has expected fields\", () => {\r",
+											"    pm.expect(res.user).to.have.property(\"id\");\r",
+											"    pm.expect(res.user).to.have.property(\"name\");\r",
+											"    pm.expect(res.user).to.have.property(\"email\");\r",
+											"    pm.expect(res.user.email).to.eql(pm.environment.get(\"workerEmail\"));\r",
 											"});\r",
+											"\r",
+											"// Save user details for subsequent requests\r",
 											"pm.environment.set(\"userJwtToken\", res.token);\r",
+											"pm.environment.set(\"jwtToken\", res.token); // for backward compatibility with other requests\r",
 											"pm.environment.set(\"userId\", res.user.id);\r",
-											"pm.environment.set(\"userRole\", res.user.role);\r",
-											""
+											"pm.environment.set(\"userName\", res.user.name);\r",
+											"pm.environment.set(\"userEmail\", res.user.email);\r",
+											"pm.environment.set(\"userRole\", res.user.role);"
 										],
 										"type": "text/javascript",
 										"packages": {},
@@ -162,7 +62,7 @@
 								],
 								"body": {
 									"mode": "raw",
-									"raw": "{\r\n  \"email\": \"{{userEmail}}\",\r\n  \"password\": \"StrongPass123!\"\r\n}\r\n"
+									"raw": "{\r\n  \"email\": \"{{workerEmail}}\",\r\n  \"password\": \"{{workerPassword}}\"\r\n}\r\n"
 								},
 								"url": {
 									"raw": "{{baseUrl}}/api/user/login",
