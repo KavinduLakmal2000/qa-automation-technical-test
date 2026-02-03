@@ -155,6 +155,65 @@ jobs:
             -d '{"name":"Test User","email":"test@example.com","password":"Test123!"}' \
             -w " -> Status: %{http_code}\n" || echo "API test failed"
 
+      - name: Create admin user for testing
+        working-directory: backend
+        run: |
+          echo "Creating admin user for testing..."
+          
+          # First, register a user via API. The backend will assign the default 'worker' role.
+          # We check for status 200 (created) or 400 (user already exists), both are acceptable here.
+          REGISTER_RESPONSE=$(curl -s -X POST http://localhost:8000/api/user/register \
+            -H "Content-Type: application/json" \
+            -d '{"name":"Admin User","email":"john@example.com","password":"StrongPass123!"}' \
+            -w "\nStatus: %{http_code}")
+          
+          echo "Admin user registration response: $REGISTER_RESPONSE"
+          
+          if [[ ! "$REGISTER_RESPONSE" =~ "Status: 200" && ! "$REGISTER_RESPONSE" =~ "Status: 400" ]]; then
+            echo "Admin user registration failed with an unexpected status."
+            exit 1
+          fi
+          
+          echo "User 'john@example.com' registered. Now promoting to admin role directly in the database."
+          
+          # We need to elevate this user to 'admin'. The API for promotion requires admin rights,
+          # creating a chicken-and-egg problem for the first admin. So, we'll update the role directly in MongoDB.
+          node -e "
+            const mongoose = require('mongoose');
+            mongoose.connect('mongodb://127.0.0.1:27017/qa_test_db')
+              .then(() => {
+                console.log('Connected to DB for admin promotion.');
+                return mongoose.connection.db.collection('users').updateOne({ email: 'john@example.com' }, { \$set: { role: 'admin' } });
+              })
+              .then(result => {
+                if (result.matchedCount === 0) throw new Error('User john@example.com not found in database.');
+                if (result.modifiedCount === 1) console.log('Successfully promoted john@example.com to admin.');
+                else console.log('User john@example.com was already an admin.');
+                return mongoose.disconnect();
+              })
+              .catch(err => {
+                console.error('Admin promotion script failed:', err.message);
+                process.exit(1);
+              });
+          "
+
+      - name: Create worker user for testing
+        working-directory: backend
+        run: |
+          echo "Creating worker user for testing..."
+          
+          REGISTER_RESPONSE=$(curl -s -X POST http://localhost:8000/api/user/register \
+            -H "Content-Type: application/json" \
+            -d '{"name":"Worker User","email":"testUser1@example.com","password":"StrongPass123!"}' \
+            -w "\nStatus: %{http_code}")
+          
+          echo "Worker user registration response: $REGISTER_RESPONSE"
+          
+          if [[ ! "$REGISTER_RESPONSE" =~ "Status: 200" && ! "$REGISTER_RESPONSE" =~ "Status: 400" ]]; then
+            echo "Worker user registration failed with an unexpected status."
+            exit 1
+          fi
+
       - name: Install Newman
         run: npm install -g newman newman-reporter-htmlextra
 
