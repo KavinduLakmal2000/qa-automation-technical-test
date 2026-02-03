@@ -155,65 +155,6 @@ jobs:
             -d '{"name":"Test User","email":"test@example.com","password":"Test123!"}' \
             -w " -> Status: %{http_code}\n" || echo "API test failed"
 
-      - name: Create admin user for testing
-        working-directory: backend
-        run: |
-          echo "Creating admin user for testing..."
-          
-          # First, register a user via API. The backend will assign the default 'worker' role.
-          # We check for status 200 (created) or 400 (user already exists), both are acceptable here.
-          REGISTER_RESPONSE=$(curl -s -X POST http://localhost:8000/api/user/register \
-            -H "Content-Type: application/json" \
-            -d '{"name":"Admin User","email":"john@example.com","password":"StrongPass123!"}' \
-            -w "\nStatus: %{http_code}")
-          
-          echo "Admin user registration response: $REGISTER_RESPONSE"
-          
-          if [[ ! "$REGISTER_RESPONSE" =~ "Status: 200" && ! "$REGISTER_RESPONSE" =~ "Status: 400" ]]; then
-            echo "Admin user registration failed with an unexpected status."
-            exit 1
-          fi
-          
-          echo "User 'john@example.com' registered. Now promoting to admin role directly in the database."
-          
-          # We need to elevate this user to 'admin'. The API for promotion requires admin rights,
-          # creating a chicken-and-egg problem for the first admin. So, we'll update the role directly in MongoDB.
-          node -e "
-            const mongoose = require('mongoose');
-            mongoose.connect('mongodb://127.0.0.1:27017/qa_test_db')
-              .then(() => {
-                console.log('Connected to DB for admin promotion.');
-                return mongoose.connection.db.collection('users').updateOne({ email: 'john@example.com' }, { \$set: { role: 'admin' } });
-              })
-              .then(result => {
-                if (result.matchedCount === 0) throw new Error('User john@example.com not found in database.');
-                if (result.modifiedCount === 1) console.log('Successfully promoted john@example.com to admin.');
-                else console.log('User john@example.com was already an admin.');
-                return mongoose.disconnect();
-              })
-              .catch(err => {
-                console.error('Admin promotion script failed:', err.message);
-                process.exit(1);
-              });
-          "
-
-      - name: Create worker user for testing
-        working-directory: backend
-        run: |
-          echo "Creating worker user for testing..."
-          
-          REGISTER_RESPONSE=$(curl -s -X POST http://localhost:8000/api/user/register \
-            -H "Content-Type: application/json" \
-            -d '{"name":"Worker User","email":"testUser1@example.com","password":"StrongPass123!"}' \
-            -w "\nStatus: %{http_code}")
-          
-          echo "Worker user registration response: $REGISTER_RESPONSE"
-          
-          if [[ ! "$REGISTER_RESPONSE" =~ "Status: 200" && ! "$REGISTER_RESPONSE" =~ "Status: 400" ]]; then
-            echo "Worker user registration failed with an unexpected status."
-            exit 1
-          fi
-
       - name: Install Newman
         run: npm install -g newman newman-reporter-htmlextra
 
@@ -261,34 +202,33 @@ jobs:
       - name: Show test results summary
         if: always()
         run: |
-          echo "=== Test Results Summary ==="
+          echo "### API Test Execution Summary" >> $GITHUB_STEP_SUMMARY
+          
           if [ -f newman-report.json ]; then
-            echo "Report exists"
-            
             # Install jq if not available
             if ! command -v jq &> /dev/null; then
               sudo apt-get install -y jq
             fi
             
-            TOTAL_REQUESTS=$(jq '.run.stats.requests.total' newman-report.json 2>/dev/null || echo "N/A")
-            FAILED_REQUESTS=$(jq '.run.stats.requests.failed' newman-report.json 2>/dev/null || echo "N/A")
-            TOTAL_TESTS=$(jq '.run.stats.assertions.total' newman-report.json 2>/dev/null || echo "N/A")
-            FAILED_TESTS=$(jq '.run.stats.assertions.failed' newman-report.json 2>/dev/null || echo "N/A")
+            TOTAL_REQUESTS=$(jq '.run.stats.requests.total' newman-report.json)
+            FAILED_REQUESTS=$(jq '.run.stats.requests.failed' newman-report.json)
+            TOTAL_ASSERTIONS=$(jq '.run.stats.assertions.total' newman-report.json)
+            FAILED_ASSERTIONS=$(jq '.run.stats.assertions.failed' newman-report.json)
             
-            echo "Total Requests: $TOTAL_REQUESTS"
-            echo "Failed Requests: $FAILED_REQUESTS"
-            echo "Total Tests: $TOTAL_TESTS"
-            echo "Failed Tests: $FAILED_TESTS"
+            echo "| | executed | failed |" >> $GITHUB_STEP_SUMMARY
+            echo "|---|---|---|" >> $GITHUB_STEP_SUMMARY
+            echo "| **Requests** | $TOTAL_REQUESTS | $FAILED_REQUESTS |" >> $GITHUB_STEP_SUMMARY
+            echo "| **Assertions** | $TOTAL_ASSERTIONS | $FAILED_ASSERTIONS |" >> $GITHUB_STEP_SUMMARY
             
-            if [ "$FAILED_REQUESTS" != "0" ] || [ "$FAILED_TESTS" != "0" ]; then
-              echo "Some tests failed"
-              echo "=== First few failures ==="
-              jq -r '.run.failures[0:5][] | "\(.source.name): \(.error.test // .error.message)"' newman-report.json 2>/dev/null || echo "Could not parse failures"
-            else
-              echo "All tests passed!"
+            if [ "$FAILED_ASSERTIONS" != "0" ] || [ "$FAILED_REQUESTS" != "0" ]; then
+              echo "" >> $GITHUB_STEP_SUMMARY
+              echo "#### Top Failures" >> $GITHUB_STEP_SUMMARY
+              echo '```' >> $GITHUB_STEP_SUMMARY
+              jq -r '.run.failures[0:5][] | "- \(.source.name): \(.error.test // .error.message)"' newman-report.json >> $GITHUB_STEP_SUMMARY
+              echo '```' >> $GITHUB_STEP_SUMMARY
             fi
           else
-            echo "No test report generated"
+            echo "No test report generated" >> $GITHUB_STEP_SUMMARY
           fi
 
       - name: Show server logs if tests failed
