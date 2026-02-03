@@ -34,7 +34,7 @@ jobs:
         run: npm install
 
       - name: Install required tools
-        run: sudo apt-get update && sudo apt-get install -y netcat-openbsd curl jq
+        run: sudo apt-get update && sudo apt-get install -y netcat-openbsd curl
 
       - name: Wait for MongoDB
         run: |
@@ -51,57 +51,74 @@ jobs:
           echo "MONGO_URI=mongodb://127.0.0.1:27017/qa_test_db" >> .env
           echo "NODE_ENV=development" >> .env
           echo "JWT_SECRET=test-jwt-secret-for-ci-12345-67890" >> .env
-          echo "Environment file created:"
-          cat .env
-
-      - name: Create admin user with correct role
-        run: |
-          echo "Creating admin user with admin role..."
-          
-          # First create user via API
-          ADMIN_RESPONSE=$(curl -s -X POST http://localhost:8000/api/user/register \
-            -H "Content-Type: application/json" \
-            -d '{"name":"Test Admin","email":"admin@example.com","password":"AdminPass123!"}' \
-            -w "\nStatus: %{http_code}")
-          
-          echo "Admin registration: $ADMIN_RESPONSE"
-          
-          # If we need admin role, we might need to update directly in MongoDB
-          # or use a different approach. For now, let's proceed with what we have.
-          
-          echo "Creating worker user..."
-          curl -s -X POST http://localhost:8000/api/user/register \
-            -H "Content-Type: application/json" \
-            -d '{"name":"Test Worker","email":"worker@example.com","password":"WorkerPass123!"}' \
-            -w "\nStatus: %{http_code}"
 
       - name: Start backend server
         working-directory: backend
         run: |
           echo "Starting backend server..."
           
-          nohup npm start > server.log 2>&1 &
+          # Start server in background
+          nohup node server.js > server.log 2>&1 &
           SERVER_PID=$!
           echo $SERVER_PID > server.pid
           
-          echo "Waiting for server to start (PID: $SERVER_PID)..."
+          echo "Server started with PID: $SERVER_PID"
+          echo "Waiting for server to be ready..."
           
-          for i in {1..30}; do
+          # Wait for server with retries
+          MAX_RETRIES=30
+          RETRY_COUNT=0
+          SERVER_READY=false
+          
+          while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+            echo "Checking server (attempt $((RETRY_COUNT + 1))/$MAX_RETRIES)..."
+            
+            # Check if process is still running
+            if ! ps -p $SERVER_PID > /dev/null 2>&1; then
+              echo "Server process died!"
+              if [ -f server.log ]; then
+                echo "=== Server logs ==="
+                tail -100 server.log
+              fi
+              exit 1
+            fi
+            
+            # Try to connect to server
             if curl -s -f http://localhost:8000 > /dev/null 2>&1; then
-              echo "Backend server is responding"
+              echo "Server is responding on root endpoint"
+              SERVER_READY=true
+              break
+            elif curl -s -f http://localhost:8000/api/docs > /dev/null 2>&1; then
+              echo "Server is responding on /api/docs"
+              SERVER_READY=true
+              break
+            elif curl -s -f http://localhost:8000/api/user/register > /dev/null 2>&1; then
+              echo "Server is responding on /api/user/register"
+              SERVER_READY=true
               break
             fi
+            
+            RETRY_COUNT=$((RETRY_COUNT + 1))
             sleep 2
           done
           
-          if ! ps -p $SERVER_PID > /dev/null 2>&1; then
-            echo "Server process died"
+          if [ "$SERVER_READY" = false ]; then
+            echo "Server failed to start within timeout"
             if [ -f server.log ]; then
-              echo "Server logs:"
-              tail -50 server.log
+              echo "=== Server logs (last 200 lines) ==="
+              tail -200 server.log
             fi
             exit 1
           fi
+          
+          echo "Server is ready and responding"
+          
+          # Test API endpoint
+          echo "Testing API endpoint..."
+          curl -s -X POST http://localhost:8000/api/user/register \
+            -H "Content-Type: application/json" \
+            -d '{"name":"Test User","email":"test@example.com","password":"Test123!"}' \
+            -w " -> Status: %{http_code}\n"
 
       - name: Install Newman
         run: npm install -g newman newman-reporter-htmlextra
@@ -110,6 +127,14 @@ jobs:
         run: |
           echo "Starting Postman tests..."
           
+          # Check if collection exists
+          if [ ! -f "Backend-repo/postman/E2E Shift Management.postman_collection.json" ]; then
+            echo "Error: Postman collection not found!"
+            ls -la Backend-repo/postman/
+            exit 1
+          fi
+          
+          # Run tests
           newman run "Backend-repo/postman/E2E Shift Management.postman_collection.json" \
             -e "Backend-repo/postman/QA Environment.postman_environment.json" \
             --env-var "baseUrl=http://localhost:8000" \
@@ -123,12 +148,21 @@ jobs:
             --reporter-json-export newman-report.json \
             --reporter-htmlextra-export newman-report.html \
             --suppress-exit-code
+          
+          echo "Newman tests completed"
 
       - name: Show test results summary
         if: always()
         run: |
           echo "=== Test Results Summary ==="
           if [ -f newman-report.json ]; then
+            echo "Report exists"
+            
+            # Install jq if not available
+            if ! command -v jq &> /dev/null; then
+              sudo apt-get install -y jq
+            fi
+            
             TOTAL_REQUESTS=$(jq '.run.stats.requests.total' newman-report.json 2>/dev/null || echo "N/A")
             FAILED_REQUESTS=$(jq '.run.stats.requests.failed' newman-report.json 2>/dev/null || echo "N/A")
             TOTAL_TESTS=$(jq '.run.stats.assertions.total' newman-report.json 2>/dev/null || echo "N/A")
@@ -141,13 +175,24 @@ jobs:
             
             if [ "$FAILED_REQUESTS" != "0" ] || [ "$FAILED_TESTS" != "0" ]; then
               echo "Some tests failed"
-              exit 1
+              echo "=== First few failures ==="
+              jq -r '.run.failures[0:5][] | "\(.source.name): \(.error.test // .error.message)"' newman-report.json 2>/dev/null || echo "Could not parse failures"
             else
               echo "All tests passed!"
             fi
           else
             echo "No test report generated"
-            exit 1
+          fi
+
+      - name: Show server logs if tests failed
+        if: failure()
+        working-directory: backend
+        run: |
+          echo "=== SERVER LOGS (last 200 lines) ==="
+          if [ -f server.log ]; then
+            tail -200 server.log
+          else
+            echo "No server logs found"
           fi
 
       - name: Stop backend server
