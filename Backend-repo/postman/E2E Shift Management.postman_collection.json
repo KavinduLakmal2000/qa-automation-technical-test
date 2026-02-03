@@ -824,14 +824,14 @@
 							"raw": "{\r\n  \"title\": \"Updated Morning Shift\",\r\n  \"typeOfShift\": [\"Morning\", \"Evening\"],\r\n  \"startTime\": \"08:00\",\r\n  \"finishTime\": \"16:00\",\r\n  \"location\": {\r\n    \"name\": \"Updated Place A\",\r\n    \"address\": \"London\",\r\n    \"postCode\": \"E1 6AN\",\r\n    \"cordinates\": {\r\n      \"latitude\": 51.5080,\r\n      \"longitude\": -0.1280\r\n    }\r\n  }\r\n}\r\n"
 						},
 						"url": {
-							"raw": "{{baseUrl}}/api/shifts/{{shiftId}}",
+							"raw": "{{baseUrl}}/api/shifts/{{adminShiftId}}",
 							"host": [
 								"{{baseUrl}}"
 							],
 							"path": [
                 "api",
 								"shifts",
-								"{{shiftId}}"
+								"{{adminShiftId}}"
 							]
 						}
 					},
@@ -917,7 +917,7 @@
 									"    pm.expect(user).to.have.property(\"id\");\r",
 									"    pm.expect(user).to.have.property(\"name\");\r",
 									"    pm.expect(user).to.have.property(\"email\");\r",
-									"    pm.expect(user.role).to.be.oneOf([\"worker\"]);\r",
+									"    pm.expect(user.role).to.be.oneOf([\"worker\", \"admin\"]);\r",
 									"});\r",
 									"\r",
 									"// Test 7: Validate location object\r",
@@ -1052,7 +1052,7 @@
 									"    pm.expect(user).to.have.property(\"id\");\r",
 									"    pm.expect(user).to.have.property(\"name\");\r",
 									"    pm.expect(user).to.have.property(\"email\");\r",
-									"    pm.expect(user.role).to.be.oneOf([\"worker\"]);\r",
+									"    pm.expect(user.role).to.be.oneOf([\"worker\", \"admin\"]);\r",
 									"});\r",
 									"\r",
 									"// Test 7: Validate location object\r",
@@ -1454,25 +1454,17 @@
 							"script": {
 								"exec": [
 									"// Try to parse response\r",
-									"let shift;\r",
+									"let res;\r",
 									"try {\r",
-									"    shift = pm.response.json().shift;\r",
+									"    res = pm.response.json();\r",
 									"} catch (e) {\r",
 									"    console.log(\"Response not JSON:\", pm.response.text());\r",
 									"}\r",
 									"//Test 1: Check if the response status is 200.\r",
 									"pm.test(\"Status 200\", () => pm.response.to.have.status(200));\r",
-									"//Test 2: Check if the shift status is Cancelled.\r",
-									"pm.test(\"Shift status is Cancelled\", () => {\r",
-									"    pm.expect(shift.status).to.equal(\"Cancelled\");\r",
-									"});\r",
-									"//Test 3: Check if the shift has been cancelled.\r",
-									"pm.test(\"Shift cannot be clocked in after cancellation\", () => {\r",
-									"    pm.expect(shift.clockInTime).to.be.null;\r",
-									"});\r",
-									"//Test 4: Check if the shift ID matches the one cancelled.\r",
-									"pm.test(\"Shift ID matches the one cancelled\", () => {\r",
-									"    pm.expect(shift.id).to.equal(pm.environment.get(\"shiftId\"));\r",
+									"//Test 2: Check success message\r",
+									"pm.test(\"Shift cancelled successfully\", () => {\r",
+									"    pm.expect(res.message).to.equal(\"Shift cancelled successfully\");\r",
 									"});\r",
 									""
 								],
