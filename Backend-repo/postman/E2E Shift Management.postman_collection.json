@@ -401,84 +401,6 @@
 			"name": "Authorization",
 			"item": [
 				{
-					"name": "Promote user to admin",
-					"event": [
-						{
-							"listen": "prerequest",
-							"script": {
-								"exec": [
-									"// Set newUserId to the worker user's ID\r",
-									"const userId = pm.environment.get(\"userId\");\r",
-									"if (userId) {\r",
-									"    pm.environment.set(\"newUserId\", userId);\r",
-									"}"
-								],
-								"type": "text/javascript",
-								"packages": {},
-								"requests": {}
-							}
-						},
-						{
-							"listen": "test",
-							"script": {
-								"exec": [
-									"const res = pm.response.json();\r",
-									"\r",
-									"//Test 1: Validate status code\r",
-									"pm.test(\"Status 200\", () => pm.response.to.have.status(200));\r",
-									"\r",
-									"//Test 2: Check if user promoted to admin role is successful\r",
-									"pm.test(\"User promoted to admin\", () => {\r",
-									"    pm.expect(res).to.have.property(\"user\");\r",
-									"    pm.expect(res.user.role).to.eql(\"admin\");\r",
-									"});\r",
-									"\r",
-									"//Test 3: Check if user's role is updated in the environment variable\r",
-									"if (res.user) {\r",
-									"    pm.environment.set(\"newUserRole\", res.user.role);\r",
-									"    pm.environment.set(\"newUserId\", res.user.id);\r",
-									"}\r",
-									""
-								],
-								"type": "text/javascript",
-								"packages": {},
-								"requests": {}
-							}
-						}
-					],
-					"request": {
-						"method": "POST",
-						"header": [
-							{
-								"key": "Content-Type",
-								"value": "application/json",
-								"type": "text"
-							},
-							{
-								"key": "Authorization",
-								"value": "Bearer {{adminJwtToken}}",
-								"type": "text"
-							}
-						],
-						"body": {
-							"mode": "raw",
-							"raw": "{\r\n  \"userId\": \"{{newUserId}}\"\r\n}"
-						},
-						"url": {
-							"raw": "{{baseUrl}}/api/user/promote-to-admin",
-							"host": [
-								"{{baseUrl}}"
-							],
-							"path": [
-								"api",
-								"user",
-								"promote-to-admin"
-							]
-						}
-					},
-					"response": []
-				},
-				{
 					"name": "Promote user to admin by worker (Invalid User)",
 					"event": [
 						{
@@ -535,7 +457,70 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\r\n  \"userId\": \"{{newUserId}}\"\r\n}"
+							"raw": "{\r\n  \"userId\": \"{{userId}}\"\r\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/user/promote-to-admin",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"user",
+								"promote-to-admin"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Promote user to admin",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"const res = pm.response.json();\r",
+									"\r",
+									"//Test 1: Validate status code\r",
+									"pm.test(\"Status 200\", () => pm.response.to.have.status(200));\r",
+									"\r",
+									"//Test 2: Check if user promoted to admin role is successful\r",
+									"pm.test(\"User promoted to admin\", () => {\r",
+									"    pm.expect(res).to.have.property(\"user\");\r",
+									"    pm.expect(res.user.role).to.eql(\"admin\");\r",
+									"});\r",
+									"\r",
+									"//Test 3: Check if user's role is updated in the environment variable\r",
+									"if (res.user) {\r",
+									"    pm.environment.set(\"newUserRole\", res.user.role);\r",
+									"    pm.environment.set(\"newUserId\", res.user.id);\r",
+									"}\r",
+									""
+								],
+								"type": "text/javascript",
+								"packages": {},
+								"requests": {}
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{adminJwtToken}}",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n  \"userId\": \"{{userId}}\"\r\n}"
 						},
 						"url": {
 							"raw": "{{baseUrl}}/api/user/promote-to-admin",
@@ -603,7 +588,7 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\r\n  \"userId\": \"{{newUserId}}\"\r\n}"
+							"raw": "{\r\n  \"userId\": \"{{userId}}\"\r\n}"
 						},
 						"url": {
 							"raw": "{{baseUrl}}/api/user/promote-to-admin",
@@ -743,7 +728,7 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\r\n  \"title\": \"Morning Shift\",\r\n  \"date\": \"{{date}}\",\r\n  \"startTime\": \"{{startTime}}\",\r\n  \"finishTime\": \"{{finishTime}}\",\r\n  \"typeOfShift\": [\"Morning\"],\r\n  \"role\": \"{{adminRole}}\",\r\n  \"user\": \"{{adminId}}\",\r\n  \"location\": {\r\n    \"name\": \"Place A\",\r\n    \"address\": \"London\",\r\n    \"postCode\": \"E1 6AN\",\r\n    \"coordinates\": {\r\n      \"latitude\": 51.5074,\r\n      \"longitude\": -0.1278\r\n    }\r\n  }\r\n}"
+							"raw": "{\r\n  \"title\": \"Morning Shift\",\r\n  \"date\": \"{{date}}\",\r\n  \"startTime\": \"{{startTime}}\",\r\n  \"finishTime\": \"{{finishTime}}\",\r\n  \"typeOfShift\": [\"Morning\"],\r\n  \"role\": \"{{adminRole}}\",\r\n  \"user\": \"{{adminId}}\",\r\n  \"location\": {\r\n    \"name\": \"Place A\",\r\n    \"address\": \"London\",\r\n    \"postCode\": \"E1 6AN\",\r\n    \"cordinates\": {\r\n      \"latitude\": 51.5074,\r\n      \"longitude\": -0.1278\r\n    }\r\n  }\r\n}"
 						},
 						"url": {
 							"raw": "{{baseUrl}}/api/shifts",
@@ -836,7 +821,7 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\r\n  \"title\": \"Updated Morning Shift\",\r\n  \"typeOfShift\": [\"Morning\", \"Evening\"],\r\n  \"startTime\": \"08:00\",\r\n  \"finishTime\": \"16:00\",\r\n  \"location\": {\r\n    \"name\": \"Updated Place A\",\r\n    \"address\": \"London\",\r\n    \"postCode\": \"E1 6AN\",\r\n    \"coordinates\": {\r\n      \"latitude\": 51.5080,\r\n      \"longitude\": -0.1280\r\n    }\r\n  }\r\n}\r\n"
+							"raw": "{\r\n  \"title\": \"Updated Morning Shift\",\r\n  \"typeOfShift\": [\"Morning\", \"Evening\"],\r\n  \"startTime\": \"08:00\",\r\n  \"finishTime\": \"16:00\",\r\n  \"location\": {\r\n    \"name\": \"Updated Place A\",\r\n    \"address\": \"London\",\r\n    \"postCode\": \"E1 6AN\",\r\n    \"cordinates\": {\r\n      \"latitude\": 51.5080,\r\n      \"longitude\": -0.1280\r\n    }\r\n  }\r\n}\r\n"
 						},
 						"url": {
 							"raw": "{{baseUrl}}/api/shifts/{{shiftId}}",
@@ -972,7 +957,7 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\r\n  \"title\": \"Morning Shift\",\r\n  \"date\": \"{{date}}\",\r\n  \"startTime\": \"{{startTime}}\",\r\n  \"finishTime\": \"{{finishTime}}\",\r\n  \"typeOfShift\": [\"Morning\"],\r\n  \"role\": \"{{userRole}}\",\r\n  \"user\": \"{{userId}}\",\r\n  \"location\": {\r\n    \"name\": \"Place B\",\r\n    \"address\": \"London\",\r\n    \"postCode\": \"E1 6AN\",\r\n    \"coordinates\": {\r\n      \"latitude\": 51.5074,\r\n      \"longitude\": -0.1278\r\n    }\r\n  }\r\n}"
+							"raw": "{\r\n  \"title\": \"Morning Shift\",\r\n  \"date\": \"{{date}}\",\r\n  \"startTime\": \"{{startTime}}\",\r\n  \"finishTime\": \"{{finishTime}}\",\r\n  \"typeOfShift\": [\"Morning\"],\r\n  \"role\": \"{{userRole}}\",\r\n  \"user\": \"{{userId}}\",\r\n  \"location\": {\r\n    \"name\": \"Place B\",\r\n    \"address\": \"London\",\r\n    \"postCode\": \"E1 6AN\",\r\n    \"cordinates\": {\r\n      \"latitude\": 51.5074,\r\n      \"longitude\": -0.1278\r\n    }\r\n  }\r\n}"
 						},
 						"url": {
 							"raw": "{{baseUrl}}/api/shifts",
@@ -1107,7 +1092,7 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\r\n  \"title\": \"Morning Shift\",\r\n  \"date\": \"{{date}}\",\r\n  \"startTime\": \"{{startTime}}\",\r\n  \"finishTime\": \"{{finishTime}}\",\r\n  \"typeOfShift\": [\"Morning\"],\r\n  \"role\": \"{{userRole}}\",\r\n  \"user\": \"{{userId}}\",\r\n  \"location\": {\r\n    \"name\": \"Place B\",\r\n    \"address\": \"London\",\r\n    \"postCode\": \"E1 6AN\",\r\n    \"coordinates\": {\r\n      \"latitude\": 51.5074,\r\n      \"longitude\": -0.1278\r\n    }\r\n  }\r\n}"
+							"raw": "{\r\n  \"title\": \"Morning Shift\",\r\n  \"date\": \"{{date}}\",\r\n  \"startTime\": \"{{startTime}}\",\r\n  \"finishTime\": \"{{finishTime}}\",\r\n  \"typeOfShift\": [\"Morning\"],\r\n  \"role\": \"{{userRole}}\",\r\n  \"user\": \"{{userId}}\",\r\n  \"location\": {\r\n    \"name\": \"Place B\",\r\n    \"address\": \"London\",\r\n    \"postCode\": \"E1 6AN\",\r\n    \"cordinates\": {\r\n      \"latitude\": 51.5074,\r\n      \"longitude\": -0.1278\r\n    }\r\n  }\r\n}"
 						},
 						"url": {
 							"raw": "{{baseUrl}}/api/shifts",
